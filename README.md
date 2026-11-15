@@ -45,6 +45,7 @@ O npm 12 bloqueia scripts de instalação de dependências que não estejam no `
 | `npm run lint` | ESLint (type-aware), inclui a proibição de `sessionStorage`/`localStorage` fora do `src/api/tokenStore.ts` |
 | `npm run typecheck` | `tsc --noEmit` do app e dos arquivos de configuração |
 | `npm test` | Vitest (jsdom, Testing Library, MSW) |
+| `npm run test:watch` | Vitest em modo watch |
 | `npm run format` | Prettier |
 | `npm run api:sync` | Copia o contrato do back e regenera os tipos |
 | `npm run api:check` | Confere se os tipos commitados batem com o contrato commitado |
@@ -87,15 +88,22 @@ Toda resposta de erro do back traz um `code` estável. O front decide **pelo `co
 
 ```ts
 import { api, unwrap } from './api/client';
-import { hasCode } from './api/errors';
+import { ApiError, hasCode } from './api/errors';
 
 try {
   await unwrap(api.POST('/auth/login', { body }));
 } catch (error) {
   if (hasCode(error, 'INVALID_CREDENTIALS')) {
-    // ...
+    // caso específico, decidido pelo code
+  } else if (error instanceof ApiError) {
+    // qualquer outro status ou code, inclusive um code novo: error.message
+    // já vem em pt-BR (do back ou a padrão pelo status)
+  } else {
+    // falha de rede ou requisição cancelada: não é ApiError
   }
 }
 ```
+
+Nunca compare `error.code` direto nem o texto de `error.message`: use `hasCode`, que só aceita codes do contrato. Um 2xx sem corpo (204) devolve `undefined`.
 
 Code ou valor de enum que o front não conhece nunca quebra a tela: o `ApiError` preserva o code novo (sem code, vira `UNKNOWN`) e `knownOr` troca valor desconhecido de enum por `UNKNOWN`.
