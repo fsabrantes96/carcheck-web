@@ -108,7 +108,7 @@ describe('parseApiError', () => {
     [503, 'Erro no servidor. Tente de novo mais tarde'],
     [0, 'Erro inesperado'],
   ])('usa a mensagem padrão em pt-BR para o status %i', (status, message) => {
-    const error = parseApiError({ status } as Response, {});
+    const error = parseApiError({ status }, {});
 
     expect(error.message).toBe(message);
   });
