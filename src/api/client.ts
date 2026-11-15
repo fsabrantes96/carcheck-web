@@ -1,0 +1,76 @@
+import createClient, { type Middleware } from 'openapi-fetch';
+import { parseApiError } from './errors';
+import type { paths } from './schema';
+import { tokenStore } from './tokenStore';
+
+/**
+ * As rotas do back não têm prefixo /api. Em dev e no preview, o proxy do
+ * Vite recebe /api e repassa para http://localhost:3000 sem o prefixo.
+ */
+export const API_BASE_URL = '/api';
+
+const BEARER_PREFIX = 'Bearer ';
+
+let onUnauthorized: (() => void) | null = null;
+
+/**
+ * Registra o que fazer quando a sessão cai (401 numa requisição que levou
+ * token), por exemplo mandar para o login. `null` remove o callback.
+ */
+export function setOnUnauthorized(callback: (() => void) | null): void {
+  onUnauthorized = callback;
+}
+
+const authMiddleware: Middleware = {
+  onRequest({ request }) {
+    const token = tokenStore.get();
+    if (token) request.headers.set('Authorization', `${BEARER_PREFIX}${token}`);
+    return request;
+  },
+  onResponse({ request, response }) {
+    if (response.status !== 401) return;
+    const authorization = request.headers.get('Authorization');
+    // 401 sem token (ex.: login com senha errada) não é sessão caindo.
+    if (!authorization?.startsWith(BEARER_PREFIX)) return;
+    // Se outro login gravou um token novo enquanto esta requisição estava
+    // em andamento, o 401 é do token antigo: não derruba a sessão nova.
+    if (tokenStore.get() !== authorization.slice(BEARER_PREFIX.length)) return;
+    tokenStore.clear();
+    onUnauthorized?.();
+  },
+};
+
+/** Cliente tipado pelo contrato (src/api/schema.d.ts). */
+export function createApiClient({
+  baseUrl = API_BASE_URL,
+}: { baseUrl?: string } = {}) {
+  const client = createClient<paths>({
+    baseUrl,
+    // Busca o fetch global a cada chamada: o openapi-fetch guardaria a
+    // referência de quando o cliente foi criado, e um fetch instalado depois
+    // (MSW nos testes, polyfill) seria ignorado.
+    fetch: (input: Request, init?: RequestInit) =>
+      globalThis.fetch(input, init),
+  });
+  client.use(authMiddleware);
+  return client;
+}
+
+export const api = createApiClient();
+
+type FetchResult<T> = {
+  data?: T;
+  error?: unknown;
+  response: Response;
+};
+
+/**
+ * Devolve os dados de uma resposta 2xx ou lança ApiError (com o code do
+ * corpo) nas demais. Use nas queryFn/mutationFn do TanStack Query:
+ * `queryFn: () => unwrap(api.GET('/auth/me'))`.
+ */
+export async function unwrap<T>(request: Promise<FetchResult<T>>): Promise<T> {
+  const { data, error, response } = await request;
+  if (!response.ok) throw parseApiError(response, error);
+  return data as T;
+}
