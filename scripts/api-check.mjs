@@ -11,42 +11,50 @@ import {
   writeSchema,
 } from './api-generate.mjs';
 
-try {
-  await access(CONTRACT_PATH);
-} catch {
-  console.error(
-    `${relative(ROOT, CONTRACT_PATH)} não existe. Rode \`npm run api:sync\` ` +
-      'com o carcheck-api ao lado deste repositório.',
-  );
-  process.exit(1);
-}
+const contractName = relative(ROOT, CONTRACT_PATH);
+const schemaName = relative(ROOT, SCHEMA_PATH);
 
-const tempDir = await mkdtemp(join(tmpdir(), 'carcheck-api-check-'));
-const tempSchema = join(tempDir, 'schema.d.ts');
+/** Devolve a mensagem de erro, ou null se o schema confere. */
+async function check() {
+  try {
+    await access(CONTRACT_PATH);
+  } catch {
+    return (
+      `${contractName} não existe. Rode \`npm run api:sync\` ` +
+      'com o carcheck-api ao lado deste repositório.'
+    );
+  }
 
-try {
-  const expected = await writeSchema(CONTRACT_PATH, tempSchema);
   let committed;
   try {
     committed = (await readFile(SCHEMA_PATH, 'utf8')).replace(/\r\n/g, '\n');
   } catch {
-    console.error(
-      `${relative(ROOT, SCHEMA_PATH)} não existe. Rode \`npm run api:sync\`.`,
-    );
-    process.exit(1);
+    return `${schemaName} não existe. Rode \`npm run api:sync\`.`;
   }
-  if (committed !== expected) {
-    console.error(
-      `${relative(ROOT, SCHEMA_PATH)} está desatualizado em relação a ` +
-        `${relative(ROOT, CONTRACT_PATH)}.\n` +
+
+  const tempDir = await mkdtemp(join(tmpdir(), 'carcheck-api-check-'));
+  try {
+    const expected = await writeSchema(
+      CONTRACT_PATH,
+      join(tempDir, 'schema.d.ts'),
+    );
+    if (committed !== expected) {
+      return (
+        `${schemaName} está desatualizado em relação a ${contractName}.\n` +
         'Não edite o schema.d.ts à mão: rode `npm run api:sync` e commite ' +
-        'api/openapi.json e src/api/schema.d.ts juntos.',
-    );
-    process.exit(1);
+        'api/openapi.json e src/api/schema.d.ts juntos.'
+      );
+    }
+    return null;
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
   }
-  console.log(
-    `${relative(ROOT, SCHEMA_PATH)} confere com ${relative(ROOT, CONTRACT_PATH)}.`,
-  );
-} finally {
-  await rm(tempDir, { recursive: true, force: true });
+}
+
+const problem = await check();
+if (problem) {
+  console.error(problem);
+  process.exitCode = 1;
+} else {
+  console.log(`${schemaName} confere com ${contractName}.`);
 }

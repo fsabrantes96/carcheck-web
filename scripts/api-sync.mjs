@@ -1,13 +1,16 @@
 // Copia o contrato do back (../carcheck-api/openapi.json, ou o caminho
 // passado como argumento) para api/openapi.json e regenera
 // src/api/schema.d.ts. Uso: npm run api:sync [-- <caminho do openapi.json>]
-import { access, copyFile } from 'node:fs/promises';
+//
+// Gera os tipos a partir da origem antes de gravar qualquer coisa: se o
+// contrato for inválido, nenhum dos dois arquivos muda.
+import { access, copyFile, writeFile } from 'node:fs/promises';
 import { relative, resolve } from 'node:path';
 import {
   CONTRACT_PATH,
+  generateSchema,
   ROOT,
   SCHEMA_PATH,
-  writeSchema,
 } from './api-generate.mjs';
 
 const source = resolve(
@@ -26,8 +29,9 @@ try {
   process.exit(1);
 }
 
+const schema = await generateSchema(source);
 await copyFile(source, CONTRACT_PATH);
-await writeSchema(CONTRACT_PATH, SCHEMA_PATH);
+await writeFile(SCHEMA_PATH, schema, 'utf8');
 
 console.log(`Contrato copiado de ${source}`);
 console.log(
