@@ -38,7 +38,8 @@ describe('listas de valores conhecidos', () => {
   ])(
     '%s tem exatamente os valores do contrato',
     (_name, known, contractValues) => {
-      expect([...known]).toEqual(contractValues);
+      // A ordem não faz parte do contrato: compara os conjuntos.
+      expect([...known].sort()).toEqual([...contractValues].sort());
     },
   );
 });

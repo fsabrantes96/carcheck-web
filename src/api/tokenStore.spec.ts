@@ -42,6 +42,20 @@ describe('tokenStore', () => {
     expect(tokenStore.get()).toBeNull();
   });
 
+  it.each([
+    ['set', () => tokenStore.set(TOKEN)],
+    ['clear', () => tokenStore.clear()],
+  ])(
+    'não lança no %s quando o próprio acesso ao sessionStorage lança erro',
+    (_name, action) => {
+      vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(
+        storageError,
+      );
+
+      expect(action).not.toThrow();
+    },
+  );
+
   it('não lança quando o setItem do storage lança erro', () => {
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(storageError);
 

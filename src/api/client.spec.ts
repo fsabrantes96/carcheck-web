@@ -49,6 +49,9 @@ function respondMeWith401() {
 }
 
 describe('cliente da API', () => {
+  // Criado de propósito aqui, antes do server.listen() do setup: assim a
+  // suíte também prova que o cliente lê o fetch global a cada chamada (com a
+  // referência guardada na criação, as requisições iriam para a rede).
   const api = createApiClient({ baseUrl: BASE_URL });
 
   beforeEach(() => {
@@ -155,6 +158,40 @@ describe('cliente da API', () => {
     });
   });
 
+  describe('outras falhas', () => {
+    it('não apaga o token nem chama o onUnauthorized num 403 com token', async () => {
+      tokenStore.set(TOKEN);
+      const onUnauthorized = vi.fn();
+      setOnUnauthorized(onUnauthorized);
+      server.use(
+        http.get(`${BASE_URL}/auth/me`, () =>
+          HttpResponse.json(errorBody(403, 'FORBIDDEN', 'Sem permissão'), {
+            status: 403,
+          }),
+        ),
+      );
+
+      await api.GET('/auth/me');
+
+      expect(tokenStore.get()).toBe(TOKEN);
+      expect(onUnauthorized).not.toHaveBeenCalled();
+    });
+
+    it('rejeita com erro de rede (não ApiError) sem apagar o token nem chamar o onUnauthorized', async () => {
+      tokenStore.set(TOKEN);
+      const onUnauthorized = vi.fn();
+      setOnUnauthorized(onUnauthorized);
+      server.use(http.get(`${BASE_URL}/auth/me`, () => HttpResponse.error()));
+
+      const error = await unwrap(api.GET('/auth/me')).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(TypeError);
+      expect(error).not.toBeInstanceOf(ApiError);
+      expect(tokenStore.get()).toBe(TOKEN);
+      expect(onUnauthorized).not.toHaveBeenCalled();
+    });
+  });
+
   describe('unwrap', () => {
     it('devolve os dados de uma resposta 2xx', async () => {
       captureAuthorization();
@@ -202,6 +239,48 @@ describe('cliente da API', () => {
         status: 403,
         code: 'UNKNOWN',
         message: 'Você não tem permissão para esta ação',
+      });
+    });
+
+    it('transforma um 502 com HTML de proxy em ApiError UNKNOWN com a mensagem padrão', async () => {
+      server.use(
+        http.get(
+          `${BASE_URL}/auth/me`,
+          () =>
+            new HttpResponse('<html><body>Bad Gateway</body></html>', {
+              status: 502,
+              headers: { 'Content-Type': 'text/html' },
+            }),
+        ),
+      );
+
+      const error = await unwrap(api.GET('/auth/me')).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error).toMatchObject({
+        status: 502,
+        code: 'UNKNOWN',
+        message: 'Erro no servidor. Tente de novo mais tarde',
+      });
+    });
+
+    it('preserva um code que o front não conhece vindo da API', async () => {
+      server.use(
+        http.get(`${BASE_URL}/auth/me`, () =>
+          HttpResponse.json(
+            errorBody(409, 'CODIGO_NOVO_QUALQUER', 'Algo novo aconteceu'),
+            { status: 409 },
+          ),
+        ),
+      );
+
+      const error = await unwrap(api.GET('/auth/me')).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(ApiError);
+      expect(error).toMatchObject({
+        status: 409,
+        code: 'CODIGO_NOVO_QUALQUER',
+        message: 'Algo novo aconteceu',
       });
     });
   });

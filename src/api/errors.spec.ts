@@ -138,6 +138,30 @@ describe('parseApiError', () => {
   });
 });
 
+describe('parseApiError com campos em branco ou malformados', () => {
+  it.each(['', '   '])('usa o code UNKNOWN quando o code é "%s"', (code) => {
+    const error = parseApiError(response(400), { code, message: 'x' });
+
+    expect(error.code).toBe('UNKNOWN');
+  });
+
+  it('usa a mensagem padrão quando a mensagem do corpo só tem espaços', () => {
+    const error = parseApiError(response(404), { code: 'X', message: '   ' });
+
+    expect(error.message).toBe('Não encontrado');
+  });
+
+  it('ignora errors quando a lista tem item que não é texto', () => {
+    const error = parseApiError(response(400), {
+      code: 'VALIDATION_FAILED',
+      message: 'Dados inválidos',
+      errors: ['email must be an email', 1],
+    });
+
+    expect(error.errors).toBeUndefined();
+  });
+});
+
 describe('hasCode', () => {
   const error = parseApiError(response(409), {
     code: 'SLOT_UNAVAILABLE',
@@ -178,5 +202,11 @@ describe('hasCode', () => {
     const unknown = parseApiError(response(500), '');
 
     expect(hasCode(unknown, 'UNKNOWN')).toBe(true);
+  });
+
+  it('não trata um code desconhecido como UNKNOWN: o caminho genérico é o default ou o status', () => {
+    const novo = parseApiError(response(409), { code: 'CODIGO_NOVO_QUALQUER' });
+
+    expect(hasCode(novo, 'UNKNOWN')).toBe(false);
   });
 });
