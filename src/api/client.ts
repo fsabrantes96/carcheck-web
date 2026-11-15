@@ -13,6 +13,10 @@ const BEARER_PREFIX = 'Bearer ';
 
 let onUnauthorized: (() => void) | null = null;
 
+// Token que cada requisição levou, lido no onRequest. O 401 é comparado com
+// ele, não com o texto do header: o Headers corta espaços das pontas do valor.
+const tokenSentBy = new WeakMap<Request, string>();
+
 /**
  * Registra o que fazer quando a sessão cai (401 numa requisição que levou
  * token), por exemplo mandar para o login. `null` remove o callback.
@@ -24,17 +28,20 @@ export function setOnUnauthorized(callback: (() => void) | null): void {
 const authMiddleware: Middleware = {
   onRequest({ request }) {
     const token = tokenStore.get();
-    if (token) request.headers.set('Authorization', `${BEARER_PREFIX}${token}`);
+    if (token) {
+      request.headers.set('Authorization', `${BEARER_PREFIX}${token}`);
+      tokenSentBy.set(request, token);
+    }
     return request;
   },
   onResponse({ request, response }) {
     if (response.status !== 401) return;
-    const authorization = request.headers.get('Authorization');
+    const sentToken = tokenSentBy.get(request);
     // 401 sem token (ex.: login com senha errada) não é sessão caindo.
-    if (!authorization?.startsWith(BEARER_PREFIX)) return;
+    if (sentToken === undefined) return;
     // Se outro login gravou um token novo enquanto esta requisição estava
     // em andamento, o 401 é do token antigo: não derruba a sessão nova.
-    if (tokenStore.get() !== authorization.slice(BEARER_PREFIX.length)) return;
+    if (tokenStore.get() !== sentToken) return;
     tokenStore.clear();
     onUnauthorized?.();
   },
@@ -68,6 +75,11 @@ type FetchResult<T> = {
  * Devolve os dados de uma resposta 2xx ou lança ApiError (com o code do
  * corpo) nas demais. Use nas queryFn/mutationFn do TanStack Query:
  * `queryFn: () => unwrap(api.GET('/auth/me'))`.
+ *
+ * - Um 2xx sem corpo (204) devolve `undefined`.
+ * - Falha de rede ou requisição cancelada não é ApiError: o fetch rejeita
+ *   com TypeError/AbortError, que passa direto. Quem trata o erro precisa de
+ *   um ramo para "não é ApiError".
  */
 export async function unwrap<T>(request: Promise<FetchResult<T>>): Promise<T> {
   const { data, error, response } = await request;

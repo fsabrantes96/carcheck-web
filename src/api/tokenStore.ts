@@ -29,7 +29,8 @@ export const tokenStore = {
     try {
       storage()?.setItem(TOKEN_KEY, token);
     } catch {
-      // Sem storage o login vale só até a página recarregar.
+      // Sem storage não há onde guardar: o token se perde e as próximas
+      // requisições saem sem Authorization (como se não houvesse login).
     }
   },
 

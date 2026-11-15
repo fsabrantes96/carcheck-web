@@ -41,8 +41,10 @@ const DEFAULT_MESSAGES: Readonly<Record<number, string>> = {
   403: 'Você não tem permissão para esta ação',
   404: 'Não encontrado',
   409: 'Conflito com o estado atual. Recarregue e tente de novo',
+  412: 'Pré-condição não atendida. Recarregue e tente de novo',
   413: 'Conteúdo grande demais',
   415: 'Formato de conteúdo não suportado',
+  416: 'Intervalo solicitado inválido',
   429: 'Muitas requisições. Aguarde um pouco e tente de novo',
 };
 
@@ -88,7 +90,7 @@ export function parseApiError(
   const record = asRecord(body);
   const errors =
     Array.isArray(record.errors) &&
-    record.errors.every((item) => typeof item === 'string')
+    record.errors.every((item): item is string => typeof item === 'string')
       ? record.errors
       : undefined;
 
