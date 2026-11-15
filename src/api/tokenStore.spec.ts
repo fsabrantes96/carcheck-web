@@ -64,7 +64,9 @@ describe('tokenStore', () => {
     tokenStore.set(TOKEN);
     tokenStore.get();
 
-    const logged = consoleSpies.flatMap((spy) => spy.mock.calls.flat());
+    const logged = consoleSpies.flatMap((spy): unknown[] =>
+      spy.mock.calls.flat(),
+    );
     expect(logged.map(String).join(' ')).not.toContain(TOKEN);
   });
 });
