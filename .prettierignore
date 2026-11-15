@@ -3,3 +3,5 @@ coverage
 package-lock.json
 api/openapi.json
 src/api/schema.d.ts
+# Markdown fica fora, como no back (o format de lá só cobre .ts)
+*.md
