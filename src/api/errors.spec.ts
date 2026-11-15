@@ -138,6 +138,18 @@ describe('parseApiError', () => {
   });
 });
 
+describe('mensagem padrão: status que o back emite e limites das faixas', () => {
+  it.each([
+    [412, 'Pré-condição não atendida. Recarregue e tente de novo'],
+    [416, 'Intervalo solicitado inválido'],
+    [499, 'Não foi possível concluir a requisição'],
+    [599, 'Erro no servidor. Tente de novo mais tarde'],
+    [600, 'Erro inesperado'],
+  ])('usa a mensagem padrão em pt-BR para o status %i', (status, message) => {
+    expect(parseApiError({ status }, {}).message).toBe(message);
+  });
+});
+
 describe('parseApiError com campos em branco ou malformados', () => {
   it.each(['', '   '])('usa o code UNKNOWN quando o code é "%s"', (code) => {
     const error = parseApiError(response(400), { code, message: 'x' });

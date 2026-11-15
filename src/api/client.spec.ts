@@ -137,6 +137,20 @@ describe('cliente da API', () => {
       expect(onUnauthorized).not.toHaveBeenCalled();
     });
 
+    it('apaga o token e chama o onUnauthorized mesmo com espaço nas pontas do token', async () => {
+      // O Headers tira os espaços das pontas do valor: o 401 precisa ser
+      // ligado ao token que a requisição leu, não ao texto do header.
+      tokenStore.set(`${TOKEN} `);
+      const onUnauthorized = vi.fn();
+      setOnUnauthorized(onUnauthorized);
+      respondMeWith401();
+
+      await api.GET('/auth/me');
+
+      expect(tokenStore.get()).toBeNull();
+      expect(onUnauthorized).toHaveBeenCalledTimes(1);
+    });
+
     it('apaga o token sem quebrar quando não há onUnauthorized registrado', async () => {
       tokenStore.set(TOKEN);
       respondMeWith401();
