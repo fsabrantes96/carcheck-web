@@ -34,28 +34,36 @@ const NO_AUTH_PATHS: ReadonlySet<string> = new Set<keyof paths>([
   '/auth/register',
 ]);
 
-const authMiddleware: Middleware = {
-  onRequest({ request, schemaPath }) {
-    if (NO_AUTH_PATHS.has(schemaPath)) return request;
-    const token = tokenStore.get();
-    if (token) {
-      request.headers.set('Authorization', `${BEARER_PREFIX}${token}`);
-      tokenSentBy.set(request, token);
-    }
-    return request;
-  },
-  onResponse({ request, response }) {
-    if (response.status !== 401) return;
-    const sentToken = tokenSentBy.get(request);
-    // 401 sem token (ex.: login com senha errada) não é sessão caindo.
-    if (sentToken === undefined) return;
-    // Se outro login gravou um token novo enquanto esta requisição estava
-    // em andamento, o 401 é do token antigo: não derruba a sessão nova.
-    if (tokenStore.get() !== sentToken) return;
-    tokenStore.clear();
-    onUnauthorized?.();
-  },
-};
+/**
+ * Middleware de autenticação de um cliente. O Bearer só vai para a origem
+ * do baseUrl do cliente: o openapi-fetch aceita baseUrl por chamada, e uma
+ * chamada para outra origem não pode levar o token.
+ */
+function createAuthMiddleware(apiOrigin: string): Middleware {
+  return {
+    onRequest({ request, schemaPath }) {
+      if (NO_AUTH_PATHS.has(schemaPath)) return request;
+      if (new URL(request.url).origin !== apiOrigin) return request;
+      const token = tokenStore.get();
+      if (token) {
+        request.headers.set('Authorization', `${BEARER_PREFIX}${token}`);
+        tokenSentBy.set(request, token);
+      }
+      return request;
+    },
+    onResponse({ request, response }) {
+      if (response.status !== 401) return;
+      const sentToken = tokenSentBy.get(request);
+      // 401 sem token (ex.: login com senha errada) não é sessão caindo.
+      if (sentToken === undefined) return;
+      // Se outro login gravou um token novo enquanto esta requisição estava
+      // em andamento, o 401 é do token antigo: não derruba a sessão nova.
+      if (tokenStore.get() !== sentToken) return;
+      tokenStore.clear();
+      onUnauthorized?.();
+    },
+  };
+}
 
 /** Cliente tipado pelo contrato (src/api/schema.d.ts). */
 export function createApiClient({
@@ -69,7 +77,9 @@ export function createApiClient({
     fetch: (input: Request, init?: RequestInit) =>
       globalThis.fetch(input, init),
   });
-  client.use(authMiddleware);
+  client.use(
+    createAuthMiddleware(new URL(baseUrl, globalThis.location?.href).origin),
+  );
   return client;
 }
 
