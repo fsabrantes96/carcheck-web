@@ -7,7 +7,7 @@ SPA em Vite + React + TypeScript, com React Router, Tailwind e TanStack Query. O
 ## Roadmap
 
 - [x] Estrutura inicial: ferramentas, tipos gerados, cliente da API com tratamento de erro por `code`, CI
-- [ ] Login e sessão
+- [x] Login e sessão: login, usuário atual (`/auth/me`), rotas protegidas e logout (o cadastro fica para depois)
 - [ ] Anúncios
 - [ ] Avaliadores e agendamentos
 
@@ -76,7 +76,7 @@ src/
   components/           componentes reutilizáveis
   features/             código por funcionalidade (login, anúncios...)
   pages/                páginas ligadas às rotas
-  test/                 setup do Vitest e servidor do MSW
+  test/                 setup do Vitest, servidor e handlers do MSW, renderApp
   routes.tsx            tabela de rotas
   queryClient.ts        configuração do TanStack Query
 docs/                   decisões e riscos

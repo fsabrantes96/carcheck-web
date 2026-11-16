@@ -1,6 +1,21 @@
 import { http, HttpResponse } from 'msw';
+import contract from '../../api/openapi.json';
+import {
+  errorBody as contractErrorBody,
+  loginResponse,
+  MARIA,
+  type CurrentUser,
+  type ErrorResponse,
+  type LoginBody,
+  type LoginResponse,
+} from '../test/api';
 import { server } from '../test/server';
-import { createApiClient, setOnUnauthorized, unwrap } from './client';
+import {
+  createApiClient,
+  NO_AUTH_PATHS,
+  setOnUnauthorized,
+  unwrap,
+} from './client';
 import { ApiError } from './errors';
 import { tokenStore } from './tokenStore';
 
@@ -79,9 +94,111 @@ describe('cliente da API', () => {
 
       expect(captured.value).toBe(`Bearer ${TOKEN}`);
     });
+
+    it('não envia Authorization para outra origem mesmo com token gravado', async () => {
+      tokenStore.set(TOKEN);
+      const captured: { value: string | null | undefined } = {
+        value: undefined,
+      };
+      server.use(
+        http.get<never, never, CurrentUser>(
+          'http://outra-origem.test/api/auth/me',
+          ({ request }) => {
+            captured.value = request.headers.get('Authorization');
+            return HttpResponse.json(MARIA.user);
+          },
+        ),
+      );
+
+      await api.GET('/auth/me', { baseUrl: 'http://outra-origem.test/api' });
+
+      expect(captured.value).toBeNull();
+    });
+
+    it('não envia Authorization no POST /auth/login mesmo com token gravado', async () => {
+      tokenStore.set(TOKEN);
+      const captured: { value: string | null | undefined } = {
+        value: undefined,
+      };
+      server.use(
+        http.post<never, LoginBody, LoginResponse>(
+          `${BASE_URL}/auth/login`,
+          ({ request }) => {
+            captured.value = request.headers.get('Authorization');
+            return HttpResponse.json(loginResponse(MARIA));
+          },
+        ),
+      );
+
+      await api.POST('/auth/login', {
+        body: { email: 'maria@example.com', password: 'senha12345' },
+      });
+
+      expect(captured.value).toBeNull();
+    });
+
+    it('não envia Authorization no POST /auth/register mesmo com token gravado', async () => {
+      tokenStore.set(TOKEN);
+      const captured: { value: string | null | undefined } = {
+        value: undefined,
+      };
+      server.use(
+        http.post<never, never, ErrorResponse>(
+          `${BASE_URL}/auth/register`,
+          ({ request }) => {
+            captured.value = request.headers.get('Authorization');
+            return HttpResponse.json(
+              contractErrorBody(
+                409,
+                'EMAIL_ALREADY_REGISTERED',
+                'E-mail já cadastrado',
+              ),
+              { status: 409 },
+            );
+          },
+        ),
+      );
+
+      await api.POST('/auth/register', {
+        body: {
+          name: 'Maria',
+          email: 'maria@example.com',
+          password: 'senha12345',
+        },
+      });
+
+      expect(captured.value).toBeNull();
+    });
   });
 
   describe('401', () => {
+    it('não apaga o token nem chama o onUnauthorized num 401 do POST /auth/login com sessão aberta', async () => {
+      tokenStore.set(TOKEN);
+      const onUnauthorized = vi.fn();
+      setOnUnauthorized(onUnauthorized);
+      server.use(
+        http.post<never, LoginBody, ErrorResponse>(
+          `${BASE_URL}/auth/login`,
+          () =>
+            HttpResponse.json(
+              contractErrorBody(
+                401,
+                'INVALID_CREDENTIALS',
+                'E-mail ou senha inválidos',
+              ),
+              { status: 401 },
+            ),
+        ),
+      );
+
+      await api.POST('/auth/login', {
+        body: { email: 'maria@example.com', password: 'senha-errada' },
+      });
+
+      expect(tokenStore.get()).toBe(TOKEN);
+      expect(onUnauthorized).not.toHaveBeenCalled();
+    });
+
     it('apaga o token e chama o onUnauthorized quando a requisição levou token', async () => {
       tokenStore.set(TOKEN);
       const clearSpy = vi.spyOn(tokenStore, 'clear');
@@ -297,5 +414,27 @@ describe('cliente da API', () => {
         message: 'Algo novo aconteceu',
       });
     });
+  });
+});
+
+describe('NO_AUTH_PATHS', () => {
+  type Operation = { security?: unknown; responses?: Record<string, unknown> };
+
+  it('inclui toda rota pública do contrato que documenta 401', () => {
+    // Rota sem security que pode responder 401 (ex.: credencial errada):
+    // se levasse o Bearer, um 401 dela derrubaria a sessão aberta.
+    const paths = contract.paths as Record<string, Record<string, Operation>>;
+    const publicWith401 = Object.entries(paths)
+      .filter(([, operations]) =>
+        Object.values(operations).some(
+          (operation) =>
+            operation.security === undefined &&
+            operation.responses?.['401'] !== undefined,
+        ),
+      )
+      .map(([path]) => path);
+
+    expect(publicWith401.length).toBeGreaterThan(0);
+    expect([...NO_AUTH_PATHS]).toEqual(expect.arrayContaining(publicWith401));
   });
 });

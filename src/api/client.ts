@@ -25,27 +25,46 @@ export function setOnUnauthorized(callback: (() => void) | null): void {
   onUnauthorized = callback;
 }
 
-const authMiddleware: Middleware = {
-  onRequest({ request }) {
-    const token = tokenStore.get();
-    if (token) {
-      request.headers.set('Authorization', `${BEARER_PREFIX}${token}`);
-      tokenSentBy.set(request, token);
-    }
-    return request;
-  },
-  onResponse({ request, response }) {
-    if (response.status !== 401) return;
-    const sentToken = tokenSentBy.get(request);
-    // 401 sem token (ex.: login com senha errada) não é sessão caindo.
-    if (sentToken === undefined) return;
-    // Se outro login gravou um token novo enquanto esta requisição estava
-    // em andamento, o 401 é do token antigo: não derruba a sessão nova.
-    if (tokenStore.get() !== sentToken) return;
-    tokenStore.clear();
-    onUnauthorized?.();
-  },
-};
+// Rotas que nunca levam o Bearer. Sem token enviado, um 401 delas (senha
+// errada) não é tratado como sessão caindo: o token atual continua e o
+// onUnauthorized não é chamado. Tipadas pelo contrato: rota renomeada no
+// back vira erro de tipo. Exportada para o client.spec.ts conferir a lista
+// contra o contrato.
+export const NO_AUTH_PATHS: ReadonlySet<string> = new Set<keyof paths>([
+  '/auth/login',
+  '/auth/register',
+]);
+
+/**
+ * Middleware de autenticação de um cliente. O Bearer só vai para a origem
+ * do baseUrl do cliente: o openapi-fetch aceita baseUrl por chamada, e uma
+ * chamada para outra origem não pode levar o token.
+ */
+function createAuthMiddleware(apiOrigin: string): Middleware {
+  return {
+    onRequest({ request, schemaPath }) {
+      if (NO_AUTH_PATHS.has(schemaPath)) return request;
+      if (new URL(request.url).origin !== apiOrigin) return request;
+      const token = tokenStore.get();
+      if (token) {
+        request.headers.set('Authorization', `${BEARER_PREFIX}${token}`);
+        tokenSentBy.set(request, token);
+      }
+      return request;
+    },
+    onResponse({ request, response }) {
+      if (response.status !== 401) return;
+      const sentToken = tokenSentBy.get(request);
+      // 401 sem token (ex.: login com senha errada) não é sessão caindo.
+      if (sentToken === undefined) return;
+      // Se outro login gravou um token novo enquanto esta requisição estava
+      // em andamento, o 401 é do token antigo: não derruba a sessão nova.
+      if (tokenStore.get() !== sentToken) return;
+      tokenStore.clear();
+      onUnauthorized?.();
+    },
+  };
+}
 
 /** Cliente tipado pelo contrato (src/api/schema.d.ts). */
 export function createApiClient({
@@ -59,11 +78,18 @@ export function createApiClient({
     fetch: (input: Request, init?: RequestInit) =>
       globalThis.fetch(input, init),
   });
-  client.use(authMiddleware);
+  client.use(
+    createAuthMiddleware(new URL(baseUrl, globalThis.location?.href).origin),
+  );
   return client;
 }
 
-export const api = createApiClient();
+// /api resolvido contra a origem da página: no navegador é o mesmo destino
+// do caminho relativo; nos testes (jsdom) o Request do Node não aceita URL
+// relativa e precisa da URL absoluta.
+export const api = createApiClient({
+  baseUrl: new URL(API_BASE_URL, globalThis.location.href).href,
+});
 
 type FetchResult<T> = {
   data?: T;

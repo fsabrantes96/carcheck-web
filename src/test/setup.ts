@@ -1,5 +1,6 @@
 /// <reference types="@testing-library/jest-dom/vitest" />
 import * as matchers from '@testing-library/jest-dom/matchers';
+import { waitForIdleQueries } from './pendingQueries';
 import { server } from './server';
 
 // Registra os matchers no `expect` global do runner. O
@@ -11,4 +12,7 @@ expect.extend(matchers);
 // Requisição sem handler é erro: nenhum teste chega à rede de verdade.
 beforeAll(() => server.listen({ onUnhandledFrame: 'error' }));
 afterEach(() => server.resetHandlers());
+// Registrado depois, roda antes do resetHandlers (os afterEach rodam em
+// ordem inversa): as buscas do teste terminam com os handlers dele.
+afterEach(waitForIdleQueries);
 afterAll(() => server.close());
