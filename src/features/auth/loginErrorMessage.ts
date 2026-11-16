@@ -32,5 +32,6 @@ export function loginErrorMessage(error: unknown): string {
   // Code desconhecido (ou outro code que a tela não trata): pelo status.
   if (status >= 500) return LOGIN_MESSAGES.server;
   if (status === 429) return LOGIN_MESSAGES.tooManyRequests;
+  if (status === 400) return LOGIN_MESSAGES.validation;
   return LOGIN_MESSAGES.generic;
 }
