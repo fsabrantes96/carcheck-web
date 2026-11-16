@@ -80,6 +80,23 @@ describe('cliente da API', () => {
       expect(captured.value).toBe(`Bearer ${TOKEN}`);
     });
 
+    it('não envia Authorization para outra origem mesmo com token gravado', async () => {
+      tokenStore.set(TOKEN);
+      const captured: { value: string | null | undefined } = {
+        value: undefined,
+      };
+      server.use(
+        http.get('http://outra-origem.test/api/auth/me', ({ request }) => {
+          captured.value = request.headers.get('Authorization');
+          return HttpResponse.json(currentUser);
+        }),
+      );
+
+      await api.GET('/auth/me', { baseUrl: 'http://outra-origem.test/api' });
+
+      expect(captured.value).toBeNull();
+    });
+
     it('não envia Authorization no POST /auth/login mesmo com token gravado', async () => {
       tokenStore.set(TOKEN);
       const captured: { value: string | null | undefined } = {
