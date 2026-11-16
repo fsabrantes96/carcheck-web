@@ -23,6 +23,24 @@ describe('logout', () => {
     expect(queryClient.getQueryData(['auth', 'me'])).toBeUndefined();
   });
 
+  it('apaga o token e limpa o cache mesmo se a navegação para o login falhar', async () => {
+    tokenStore.set(MARIA.token);
+    server.use(meByToken(MARIA));
+    const { user, router, queryClient } = renderApp('/');
+    queryClient.setQueryData(['dado-do-usuario'], 'dado da Maria');
+    await screen.findByRole('button', { name: 'Sair' });
+    vi.spyOn(router, 'navigate').mockRejectedValue(
+      new Error('navegação bloqueada'),
+    );
+
+    await user.click(screen.getByRole('button', { name: 'Sair' }));
+
+    await waitFor(() =>
+      expect(queryClient.getQueryData(['dado-do-usuario'])).toBeUndefined(),
+    );
+    expect(tokenStore.get()).toBeNull();
+  });
+
   it('depois de sair e entrar com outro usuário, não mostra nada do primeiro', async () => {
     tokenStore.set(MARIA.token);
     server.use(meByToken(MARIA, JOAO), loginByEmail(MARIA, JOAO));
