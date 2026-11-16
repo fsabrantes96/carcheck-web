@@ -32,3 +32,8 @@ export function safeRedirectPath(from: string | null | undefined): string {
 
   return `${url.pathname}${url.search}${url.hash}`;
 }
+
+/** Caminho do login levando o caminho atual no from. */
+export function loginPathFrom(from: string): string {
+  return `${LOGIN_PATH}?${new URLSearchParams({ from }).toString()}`;
+}

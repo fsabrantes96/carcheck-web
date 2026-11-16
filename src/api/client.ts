@@ -73,7 +73,12 @@ export function createApiClient({
   return client;
 }
 
-export const api = createApiClient();
+// /api resolvido contra a origem da página: no navegador é o mesmo destino
+// do caminho relativo; nos testes (jsdom) o Request do Node não aceita URL
+// relativa e precisa da URL absoluta.
+export const api = createApiClient({
+  baseUrl: new URL(API_BASE_URL, globalThis.location.href).href,
+});
 
 type FetchResult<T> = {
   data?: T;
