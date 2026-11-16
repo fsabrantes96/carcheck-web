@@ -14,6 +14,9 @@ export const currentUserQuery = queryOptions({
   queryKey: CURRENT_USER_KEY,
   queryFn: () => unwrap(api.GET('/auth/me')),
   retry: false,
+  // O login já busca o usuário: sem isto, a rota protegida buscaria de novo
+  // ao montar. 30 s ainda deixam uma mudança de roles aparecer logo.
+  staleTime: 30_000,
 });
 
 /**
