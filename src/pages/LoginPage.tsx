@@ -28,6 +28,9 @@ export function LoginPage() {
     // Sem nova tentativa automática: o back aceita 5 logins por minuto por
     // IP, e repetir um POST de login às cegas só gasta essa cota.
     retry: false,
+    // As variables da mutation têm a senha: sem tempo de cache, a mutation
+    // sai do MutationCache assim que a tela desmonta.
+    gcTime: 0,
     /** Devolve se a sessão nova se manteve depois do /auth/me. */
     mutationFn: async (credentials: LoginDto): Promise<boolean> => {
       // O POST /auth/login sai sem Authorization (client.ts): um 401 aqui é
