@@ -25,6 +25,9 @@ describe('safeRedirectPath', () => {
     '/\n/site.com',
     'site.com',
     ' /anuncios',
+    '/.//site.com',
+    '/a/..//site.com',
+    '/%2e//site.com',
   ])('rejeita %j e devolve /', (from) => {
     expect(safeRedirectPath(from)).toBe('/');
   });
