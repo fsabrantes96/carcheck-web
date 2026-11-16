@@ -16,7 +16,13 @@ export function useLogout(): () => Promise<void> {
     tokenStore.clear();
     // Navega antes de limpar o cache: a página protegida desmonta primeiro
     // e nenhum observer recria a busca do usuário que acabou de sair.
-    await navigate(LOGIN_PATH, { replace: true });
-    queryClient.clear();
+    try {
+      await navigate(LOGIN_PATH, { replace: true });
+    } catch {
+      // A navegação falhou: o token já foi apagado, e a rota protegida
+      // manda para o login no próximo render. O cache é limpo mesmo assim.
+    } finally {
+      queryClient.clear();
+    }
   }, [navigate, queryClient]);
 }
