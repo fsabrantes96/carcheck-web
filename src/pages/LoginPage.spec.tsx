@@ -117,6 +117,25 @@ describe('tela de login', () => {
       expect(tokenStore.get()).toBe(MARIA.token);
     });
 
+    it('não deixa a senha no cache de mutations depois do login', async () => {
+      server.use(loginByEmail(MARIA), respondMe(MARIA.user).handler);
+      const { user, queryClient } = renderApp('/login');
+
+      await submitLogin(user);
+      await screen.findByText(/Maria Souza/);
+
+      await waitFor(() =>
+        expect(
+          JSON.stringify(
+            queryClient
+              .getMutationCache()
+              .getAll()
+              .map((mutation) => mutation.state.variables),
+          ),
+        ).not.toContain(PASSWORD),
+      );
+    });
+
     it('navega para o from', async () => {
       server.use(loginByEmail(MARIA), respondMe(MARIA.user).handler);
       const { user, currentPath } = renderApp(
