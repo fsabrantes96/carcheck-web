@@ -95,6 +95,25 @@ describe('rota protegida', () => {
     expect(await screen.findByText(/Maria Souza/)).toBeInTheDocument();
   });
 
+  it('não aninha outro from num 401 do /auth/me estando no login com maiúscula e barra no fim', async () => {
+    tokenStore.set(MARIA.token);
+    server.use(
+      http.get<never, never, ErrorResponse>(`${API_URL}/auth/me`, () =>
+        HttpResponse.json(
+          errorBody(401, 'UNAUTHENTICATED', 'Token inválido ou expirado'),
+          { status: 401 },
+        ),
+      ),
+    );
+    const { currentPath } = renderApp('/Login/?from=%2Fanuncios');
+
+    expect(
+      await screen.findByRole('form', { name: 'Entrar' }),
+    ).toBeInTheDocument();
+    expect(tokenStore.get()).toBeNull();
+    expect(currentPath()).toBe('/Login/?from=%2Fanuncios');
+  });
+
   it('apaga o token, limpa o cache e redireciona para /login?from=<caminho> num 401 do /auth/me, sem chamar o /auth/me de novo', async () => {
     tokenStore.set(MARIA.token);
     let meCalls = 0;

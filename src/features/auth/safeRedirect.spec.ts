@@ -32,10 +32,13 @@ describe('safeRedirectPath', () => {
     expect(safeRedirectPath(from)).toBe('/');
   });
 
-  it.each(['/login', '/login?from=/anuncios'])(
-    'devolve / quando o from aponta para o próprio login (%j)',
-    (from) => {
-      expect(safeRedirectPath(from)).toBe('/');
-    },
-  );
+  it.each([
+    '/login',
+    '/login?from=/anuncios',
+    '/LOGIN',
+    '/login/',
+    '/Login/?from=/anuncios',
+  ])('devolve / quando o from aponta para o próprio login (%j)', (from) => {
+    expect(safeRedirectPath(from)).toBe('/');
+  });
 });
