@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query';
 import type { createBrowserRouter } from 'react-router';
 import { setOnUnauthorized } from '../../api/client';
-import { LOGIN_PATH, loginPathFrom } from './safeRedirect';
+import { isLoginPath, loginPathFrom } from './safeRedirect';
 
 type AppRouter = Pick<
   ReturnType<typeof createBrowserRouter>,
@@ -22,12 +22,18 @@ export function registerSessionHandlers(
     // ficar no cache.
     queryClient.clear();
     const { pathname, search, hash } = router.state.location;
-    // Já no login (ex.: /auth/me logo depois do login): fica onde está,
-    // sem aninhar outro from.
-    if (pathname === LOGIN_PATH) return;
-    void router.navigate(loginPathFrom(`${pathname}${search}${hash}`), {
-      replace: true,
-    });
+    const current = `${pathname}${search}${hash}`;
+    // Já no login (token velho ao abrir /login, ou /auth/me logo depois do
+    // login): fica no mesmo caminho, sem aninhar outro from. Navega para ele
+    // mesmo só para a tela renderizar de novo: nem o clear() (que não avisa
+    // os observers da query removida) nem o token apagado fazem isso, e a
+    // tela ficaria presa em "Carregando…".
+    void router.navigate(
+      isLoginPath(pathname) ? current : loginPathFrom(current),
+      {
+        replace: true,
+      },
+    );
   });
   return () => setOnUnauthorized(null);
 }

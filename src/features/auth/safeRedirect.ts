@@ -1,3 +1,5 @@
+import { matchPath } from 'react-router';
+
 export const LOGIN_PATH = '/login';
 export const HOME_PATH = '/';
 
@@ -31,9 +33,18 @@ export function safeRedirectPath(from: string | null | undefined): string {
   // A saída também precisa ser caminho interno: o parse resolve . e ..
   // (inclusive %2e), e /.//site.com vira //site.com.
   if (url.pathname.startsWith('//')) return HOME_PATH;
-  if (url.pathname === LOGIN_PATH) return HOME_PATH;
+  if (isLoginPath(url.pathname)) return HOME_PATH;
 
   return `${url.pathname}${url.search}${url.hash}`;
+}
+
+/**
+ * O caminho cai na rota do login? Usa o matchPath do React Router, que,
+ * como a rota, não diferencia maiúsculas e aceita barra no fim (/LOGIN,
+ * /login/).
+ */
+export function isLoginPath(pathname: string): boolean {
+  return matchPath({ path: LOGIN_PATH }, pathname) !== null;
 }
 
 /** Caminho do login levando o caminho atual no from. */
