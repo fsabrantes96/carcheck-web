@@ -1,7 +1,7 @@
 import { matchPath } from 'react-router';
 
 export const LOGIN_PATH = '/login';
-export const HOME_PATH = '/';
+const HOME_PATH = '/';
 
 // Origem fictícia só para o parse: um caminho interno resolvido contra ela
 // continua nela; um destino externo (//site.com, https://...) muda a origem.

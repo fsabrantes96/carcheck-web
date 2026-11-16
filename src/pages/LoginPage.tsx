@@ -4,6 +4,7 @@ import { Navigate, useNavigate, useSearchParams } from 'react-router';
 import { api, unwrap } from '../api/client';
 import type { components } from '../api/schema';
 import { tokenStore } from '../api/tokenStore';
+import { LoadingState } from '../components/LoadingState';
 import { currentUserQuery, useCurrentUser } from '../features/auth/currentUser';
 import {
   LOGIN_MESSAGES,
@@ -45,9 +46,12 @@ export function LoginPage() {
         await queryClient.fetchQuery(currentUserQuery);
       } catch {
         // Rede ou 5xx: segue com o token, e a rota protegida mostra o erro
-        // com "Tentar de novo". 401: o cliente já apagou o token (e o
-        // onUnauthorized limpou o cache, o que cancela esta busca); o login
-        // não vale e o usuário fica nesta tela.
+        // com "Tentar de novo". 401: o middleware do cliente apaga o token e
+        // chama o onUnauthorized ainda dentro da busca; o queryClient.clear()
+        // dele cancela esta query, e o erro que chega aqui é um
+        // CancelledError do TanStack, não o ApiError 401. Por isso a decisão
+        // é pelo token (apagado ou não), não pelo status nem pelo code do
+        // erro. O login não vale e o usuário fica nesta tela.
       }
       return tokenStore.get() !== null;
     },
@@ -68,13 +72,7 @@ export function LoginPage() {
   // o onSuccess.
   if (!submitting && currentUser.hasToken) {
     if (currentUser.isSuccess) return <Navigate to={destination} replace />;
-    if (currentUser.isPending) {
-      return (
-        <p role="status" className="p-6 text-slate-600">
-          Carregando…
-        </p>
-      );
-    }
+    if (currentUser.isPending) return <LoadingState />;
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {

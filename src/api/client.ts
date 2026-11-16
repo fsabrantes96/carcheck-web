@@ -28,8 +28,9 @@ export function setOnUnauthorized(callback: (() => void) | null): void {
 // Rotas que nunca levam o Bearer. Sem token enviado, um 401 delas (senha
 // errada) não é tratado como sessão caindo: o token atual continua e o
 // onUnauthorized não é chamado. Tipadas pelo contrato: rota renomeada no
-// back vira erro de tipo.
-const NO_AUTH_PATHS: ReadonlySet<string> = new Set<keyof paths>([
+// back vira erro de tipo. Exportada para o client.spec.ts conferir a lista
+// contra o contrato.
+export const NO_AUTH_PATHS: ReadonlySet<string> = new Set<keyof paths>([
   '/auth/login',
   '/auth/register',
 ]);

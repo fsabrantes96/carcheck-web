@@ -1,4 +1,5 @@
 import { Navigate, Outlet, useLocation } from 'react-router';
+import { LoadingState } from '../../components/LoadingState';
 import { useCurrentUser } from './currentUser';
 import { loginPathFrom } from './safeRedirect';
 
@@ -17,13 +18,7 @@ export function RequireAuth() {
     return <Navigate to={loginPathFrom(from)} replace />;
   }
 
-  if (isPending) {
-    return (
-      <p role="status" className="p-6 text-slate-600">
-        Carregando…
-      </p>
-    );
-  }
+  if (isPending) return <LoadingState />;
 
   if (isError) {
     return (
