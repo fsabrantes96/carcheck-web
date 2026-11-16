@@ -25,8 +25,18 @@ export function setOnUnauthorized(callback: (() => void) | null): void {
   onUnauthorized = callback;
 }
 
+// Rotas que nunca levam o Bearer. Sem token enviado, um 401 delas (senha
+// errada) não é tratado como sessão caindo: o token atual continua e o
+// onUnauthorized não é chamado. Tipadas pelo contrato: rota renomeada no
+// back vira erro de tipo.
+const NO_AUTH_PATHS: ReadonlySet<string> = new Set<keyof paths>([
+  '/auth/login',
+  '/auth/register',
+]);
+
 const authMiddleware: Middleware = {
-  onRequest({ request }) {
+  onRequest({ request, schemaPath }) {
+    if (NO_AUTH_PATHS.has(schemaPath)) return request;
     const token = tokenStore.get();
     if (token) {
       request.headers.set('Authorization', `${BEARER_PREFIX}${token}`);
