@@ -28,6 +28,9 @@ export function safeRedirectPath(from: string | null | undefined): string {
     return HOME_PATH;
   }
   if (url.origin !== PARSE_ORIGIN) return HOME_PATH;
+  // A saída também precisa ser caminho interno: o parse resolve . e ..
+  // (inclusive %2e), e /.//site.com vira //site.com.
+  if (url.pathname.startsWith('//')) return HOME_PATH;
   if (url.pathname === LOGIN_PATH) return HOME_PATH;
 
   return `${url.pathname}${url.search}${url.hash}`;
