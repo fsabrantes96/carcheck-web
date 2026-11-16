@@ -79,9 +79,83 @@ describe('cliente da API', () => {
 
       expect(captured.value).toBe(`Bearer ${TOKEN}`);
     });
+
+    it('não envia Authorization no POST /auth/login mesmo com token gravado', async () => {
+      tokenStore.set(TOKEN);
+      const captured: { value: string | null | undefined } = {
+        value: undefined,
+      };
+      server.use(
+        http.post(`${BASE_URL}/auth/login`, ({ request }) => {
+          captured.value = request.headers.get('Authorization');
+          return HttpResponse.json({
+            accessToken: 'token-novo',
+            user: {
+              id: currentUser.id,
+              name: currentUser.name,
+              email: currentUser.email,
+              createdAt: currentUser.createdAt,
+            },
+          });
+        }),
+      );
+
+      await api.POST('/auth/login', {
+        body: { email: 'maria@example.com', password: 'senha12345' },
+      });
+
+      expect(captured.value).toBeNull();
+    });
+
+    it('não envia Authorization no POST /auth/register mesmo com token gravado', async () => {
+      tokenStore.set(TOKEN);
+      const captured: { value: string | null | undefined } = {
+        value: undefined,
+      };
+      server.use(
+        http.post(`${BASE_URL}/auth/register`, ({ request }) => {
+          captured.value = request.headers.get('Authorization');
+          return HttpResponse.json(
+            errorBody(409, 'EMAIL_ALREADY_REGISTERED', 'E-mail já cadastrado'),
+            { status: 409 },
+          );
+        }),
+      );
+
+      await api.POST('/auth/register', {
+        body: {
+          name: 'Maria',
+          email: 'maria@example.com',
+          password: 'senha12345',
+        },
+      });
+
+      expect(captured.value).toBeNull();
+    });
   });
 
   describe('401', () => {
+    it('não apaga o token nem chama o onUnauthorized num 401 do POST /auth/login com sessão aberta', async () => {
+      tokenStore.set(TOKEN);
+      const onUnauthorized = vi.fn();
+      setOnUnauthorized(onUnauthorized);
+      server.use(
+        http.post(`${BASE_URL}/auth/login`, () =>
+          HttpResponse.json(
+            errorBody(401, 'INVALID_CREDENTIALS', 'E-mail ou senha inválidos'),
+            { status: 401 },
+          ),
+        ),
+      );
+
+      await api.POST('/auth/login', {
+        body: { email: 'maria@example.com', password: 'senha-errada' },
+      });
+
+      expect(tokenStore.get()).toBe(TOKEN);
+      expect(onUnauthorized).not.toHaveBeenCalled();
+    });
+
     it('apaga o token e chama o onUnauthorized quando a requisição levou token', async () => {
       tokenStore.set(TOKEN);
       const clearSpy = vi.spyOn(tokenStore, 'clear');
