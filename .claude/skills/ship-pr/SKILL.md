@@ -3,39 +3,45 @@ name: ship-pr
 description: Publica a branch atual e abre a PR no GitHub, depois de verificar branch, árvore limpa, lint, typecheck, testes, build, api:check, testes removidos e arquivos sensíveis. Só roda quando o usuário digita /ship-pr.
 disable-model-invocation: true
 allowed-tools:
-  - Bash(git status *)
-  - Bash(git branch --show-current)
-  - Bash(git rev-parse *)
-  - Bash(git diff *)
-  - Bash(git log *)
-  - Bash(git grep *)
-  - Bash(gh auth status *)
-  - Bash(gh pr view *)
-  - Bash(npm run lint *)
-  - Bash(npm run typecheck *)
-  - Bash(npm test *)
-  - Bash(npm run build *)
-  - Bash(npm run api:check *)
-  - PowerShell(git status *)
-  - PowerShell(git branch --show-current)
-  - PowerShell(git rev-parse *)
-  - PowerShell(git diff *)
-  - PowerShell(git log *)
-  - PowerShell(git grep *)
-  - PowerShell(gh auth status *)
-  - PowerShell(gh pr view *)
-  - PowerShell(npm run lint *)
-  - PowerShell(npm run typecheck *)
-  - PowerShell(npm test *)
-  - PowerShell(npm run build *)
-  - PowerShell(npm run api:check *)
+  - 'Bash(git branch --show-current)'
+  - 'Bash(gh auth status)'
+  - 'Bash(git status --porcelain)'
+  - 'Bash(git rev-parse HEAD)'
+  - 'Bash(npm run lint)'
+  - 'Bash(npm run typecheck)'
+  - 'Bash(npm test)'
+  - 'Bash(npm run build)'
+  - 'Bash(npm run api:check)'
+  - 'Bash(git diff -w main...HEAD -- "*.spec.ts" "*.spec.tsx")'
+  - 'Bash(git diff --name-only main...HEAD)'
+  - 'Bash(git diff main...HEAD)'
+  - 'Bash(git log --oneline main..HEAD)'
+  - 'Bash(git grep -c "it(" main -- "*.spec.ts" "*.spec.tsx")'
+  - 'Bash(git grep -c "it(" -- "*.spec.ts" "*.spec.tsx")'
+  - 'Bash(gh pr view * --json url)'
+  - 'PowerShell(git branch --show-current)'
+  - 'PowerShell(gh auth status)'
+  - 'PowerShell(git status --porcelain)'
+  - 'PowerShell(git rev-parse HEAD)'
+  - 'PowerShell(npm run lint)'
+  - 'PowerShell(npm run typecheck)'
+  - 'PowerShell(npm test)'
+  - 'PowerShell(npm run build)'
+  - 'PowerShell(npm run api:check)'
+  - 'PowerShell(git diff -w main...HEAD -- "*.spec.ts" "*.spec.tsx")'
+  - 'PowerShell(git diff --name-only main...HEAD)'
+  - 'PowerShell(git diff main...HEAD)'
+  - 'PowerShell(git log --oneline main..HEAD)'
+  - 'PowerShell(git grep -c "it(" main -- "*.spec.ts" "*.spec.tsx")'
+  - 'PowerShell(git grep -c "it(" -- "*.spec.ts" "*.spec.tsx")'
+  - 'PowerShell(gh pr view * --json url)'
 ---
 
 # /ship-pr: publicar a branch e abrir a PR
 
 Esta skill é a **única exceção** à regra do `CLAUDE.md` de que o agente nunca altera o remoto. Ela só vale quando o usuário digita `/ship-pr`. Fora dela, a regra geral continua valendo: o agente não sugere esta skill no meio de outra tarefa e não faz push por conta própria.
 
-O `allowed-tools` acima só tem comandos de leitura e de verificação. `git push` e `gh pr create` ficam de fora de propósito: o `.claude/settings.json` tem regras `ask` para eles, então o Claude Code pede permissão na hora, como segunda trava.
+O `allowed-tools` acima só tem os comandos exatos de leitura e de verificação que os passos abaixo rodam, sem curinga (exceto o nome da branch no `gh pr view`), para não aceitar opções que executam programas ou gravam arquivos (`git grep -O`, `git diff --output`, `npm test -- -u`). Se precisar de outra forma de um comando, o Claude Code pede permissão. `git push` e `gh pr create` ficam de fora de propósito: o `.claude/settings.json` tem regras `ask` para eles, então o Claude Code pede permissão na hora, como segunda trava. A liberação do `allowed-tools` vale só no turno em que o usuário digita `/ship-pr`; o passo 7, que roda depois da aprovação, segue as regras do `.claude/settings.json` e o modo de permissão.
 
 ## Proibido nesta skill
 
