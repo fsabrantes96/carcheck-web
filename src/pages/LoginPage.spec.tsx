@@ -249,15 +249,16 @@ describe('tela de login', () => {
 
     it('mostra a mensagem genérica num code desconhecido sem quebrar a tela', async () => {
       // Code que o contrato ainda não conhece: o handler não pode ser tipado
-      // pelo ErrorResponseDto.
+      // pelo ErrorResponseDto. Status 409: um 400 desconhecido cai na
+      // mensagem de validação (caso abaixo).
       server.use(
         http.post(`${API_URL}/auth/login`, () =>
           HttpResponse.json(
             {
-              ...errorBody(400, 'BAD_REQUEST', 'Algo novo'),
+              ...errorBody(409, 'CONFLICT', 'Algo novo'),
               code: 'CODIGO_QUE_O_FRONT_NAO_CONHECE',
             },
-            { status: 400 },
+            { status: 409 },
           ),
         ),
       );
@@ -269,6 +270,27 @@ describe('tela de login', () => {
         'Não foi possível entrar. Tente de novo.',
       );
       expect(screen.getByRole('button', { name: 'Entrar' })).toBeEnabled();
+    });
+
+    it('mostra a mensagem de validação num 400 com code desconhecido', async () => {
+      server.use(
+        http.post(`${API_URL}/auth/login`, () =>
+          HttpResponse.json(
+            {
+              ...errorBody(400, 'BAD_REQUEST', 'Senha longa demais'),
+              code: 'PASSWORD_TOO_LONG',
+            },
+            { status: 400 },
+          ),
+        ),
+      );
+      const { user } = renderApp('/login');
+
+      await submitLogin(user);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'Confira o e-mail e a senha informados.',
+      );
     });
 
     it('mostra a mensagem de falha de rede sem quebrar a tela', async () => {
