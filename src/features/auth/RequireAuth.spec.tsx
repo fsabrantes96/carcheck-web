@@ -3,11 +3,9 @@ import { delay, http, HttpResponse } from 'msw';
 import { tokenStore } from '../../api/tokenStore';
 import {
   API_URL,
-  deferred,
   errorBody,
   MARIA,
   respondMe,
-  type CurrentUser,
   type ErrorResponse,
 } from '../../test/api';
 import { renderApp } from '../../test/renderApp';
@@ -28,18 +26,32 @@ describe('rota protegida', () => {
 
   it('mostra carregando enquanto o /auth/me não responde', async () => {
     tokenStore.set(MARIA.token);
-    const pending = deferred();
     server.use(
-      http.get<never, never, CurrentUser>(`${API_URL}/auth/me`, async () => {
-        await pending.promise;
-        return HttpResponse.json(MARIA.user);
+      http.get(`${API_URL}/auth/me`, async () => {
+        await delay('infinite');
       }),
+    );
+
+    const { queryClient } = renderApp('/');
+
+    expect(await screen.findByRole('status')).toHaveTextContent('Carregando…');
+    // A resposta nunca chega: cancela a busca para o fim do teste não
+    // esperar por ela (src/test/pendingQueries.ts).
+    await queryClient.cancelQueries();
+  });
+
+  it('mostra a página inicial quando o /auth/me traz um role que o front não conhece', async () => {
+    tokenStore.set(MARIA.token);
+    // Role fora do contrato atual: o handler não pode ser tipado pelo
+    // CurrentUserResponseDto.
+    server.use(
+      http.get(`${API_URL}/auth/me`, () =>
+        HttpResponse.json({ ...MARIA.user, roles: ['USER', 'SUPERVISOR'] }),
+      ),
     );
 
     renderApp('/');
 
-    expect(await screen.findByRole('status')).toHaveTextContent('Carregando…');
-    pending.resolve();
     expect(await screen.findByText(/Maria Souza/)).toBeInTheDocument();
   });
 
@@ -129,12 +141,13 @@ describe('rota protegida', () => {
     const { queryClient, currentPath } = renderApp('/?aba=2');
     queryClient.setQueryData(['dado-do-usuario'], 'dado da Maria');
 
-    await waitFor(() =>
-      expect(currentPath()).toBe('/login?from=%2F%3Faba%3D2'),
-    );
-    // Dá tempo para um eventual laço de refetch aparecer.
-    await delay(50);
+    // O formulário só aparece depois do redirecionamento e da tela de login
+    // já sem token: um laço de refetch teria chamado o /auth/me de novo.
+    expect(
+      await screen.findByRole('form', { name: 'Entrar' }),
+    ).toBeInTheDocument();
 
+    expect(currentPath()).toBe('/login?from=%2F%3Faba%3D2');
     expect(tokenStore.get()).toBeNull();
     expect(queryClient.getQueryData(['dado-do-usuario'])).toBeUndefined();
     expect(meCalls).toBe(1);

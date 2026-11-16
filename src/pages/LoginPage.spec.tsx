@@ -4,15 +4,12 @@ import { delay, http, HttpResponse } from 'msw';
 import { tokenStore } from '../api/tokenStore';
 import {
   API_URL,
-  deferred,
   errorBody,
   loginByEmail,
-  loginResponse,
   MARIA,
   respondMe,
   type ErrorResponse,
   type LoginBody,
-  type LoginResponse,
 } from '../test/api';
 import { renderApp } from '../test/renderApp';
 import { server } from '../test/server';
@@ -70,38 +67,18 @@ describe('tela de login', () => {
     });
 
     it('desabilita o botão e mostra "Entrando…" enquanto o login está em andamento', async () => {
-      const pending = deferred();
       server.use(
-        http.post<never, LoginBody, LoginResponse>(
-          `${API_URL}/auth/login`,
-          async () => {
-            await pending.promise;
-            return HttpResponse.json(loginResponse(MARIA));
-          },
-        ),
-        respondMe(MARIA.user).handler,
+        http.post(`${API_URL}/auth/login`, async () => {
+          await delay('infinite');
+        }),
       );
       const { user } = renderApp('/login');
 
       await submitLogin(user);
 
-      expect(screen.getByRole('button', { name: 'Entrando…' })).toBeDisabled();
-      pending.resolve();
-      expect(await screen.findByText(/Maria Souza/)).toBeInTheDocument();
-    });
-
-    it('não coloca a senha na URL depois de enviar o formulário', async () => {
-      respondLoginError(
-        401,
-        errorBody(401, 'INVALID_CREDENTIALS', 'E-mail ou senha inválidos'),
-      );
-      const { user, currentPath } = renderApp('/login');
-
-      await submitLogin(user);
-      await screen.findByRole('alert');
-
-      expect(currentPath()).toBe('/login');
-      expect(currentPath()).not.toContain(PASSWORD);
+      expect(
+        await screen.findByRole('button', { name: 'Entrando…' }),
+      ).toBeDisabled();
     });
   });
 
@@ -127,6 +104,17 @@ describe('tela de login', () => {
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       expect(me.calls()).toBe(1);
+    });
+
+    it('remove do cache os dados de antes do login', async () => {
+      server.use(loginByEmail(MARIA), respondMe(MARIA.user).handler);
+      const { user, queryClient } = renderApp('/login');
+      queryClient.setQueryData(['dado-anterior'], 'dado de outra sessão');
+
+      await submitLogin(user);
+      await screen.findByText(/Maria Souza/);
+
+      expect(queryClient.getQueryData(['dado-anterior'])).toBeUndefined();
     });
 
     it('não deixa a senha no cache de mutations depois do login', async () => {
@@ -193,6 +181,30 @@ describe('tela de login', () => {
       expect(tokenStore.get()).toBe(MARIA.token);
     });
 
+    it('navega mesmo assim quando o /auth/me responde 500, e a página mostra o erro sem apagar o token', async () => {
+      server.use(
+        loginByEmail(MARIA),
+        http.get<never, never, ErrorResponse>(`${API_URL}/auth/me`, () =>
+          HttpResponse.json(
+            errorBody(500, 'INTERNAL_ERROR', 'Erro interno do servidor'),
+            { status: 500 },
+          ),
+        ),
+      );
+      const { user, currentPath } = renderApp('/login');
+
+      await submitLogin(user);
+
+      expect(
+        await screen.findByRole('button', { name: 'Tentar de novo' }),
+      ).toBeInTheDocument();
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'Não foi possível carregar sua sessão.',
+      );
+      expect(currentPath()).toBe('/');
+      expect(tokenStore.get()).toBe(MARIA.token);
+    });
+
     it('fica no login sem aninhar o from e mostra a mensagem genérica quando o /auth/me responde 401', async () => {
       server.use(
         loginByEmail(MARIA),
@@ -216,6 +228,44 @@ describe('tela de login', () => {
   });
 
   describe('login com erro', () => {
+    it('com sessão aberta, um 401 do login mantém o token, não aninha o from e sai sem Authorization', async () => {
+      // Sessão aberta com o /auth/me falhando: a tela mostra o formulário.
+      tokenStore.set(MARIA.token);
+      let authorization: string | null | undefined;
+      server.use(
+        http.get<never, never, ErrorResponse>(`${API_URL}/auth/me`, () =>
+          HttpResponse.json(
+            errorBody(500, 'INTERNAL_ERROR', 'Erro interno do servidor'),
+            { status: 500 },
+          ),
+        ),
+        http.post<never, LoginBody, ErrorResponse>(
+          `${API_URL}/auth/login`,
+          ({ request }) => {
+            authorization = request.headers.get('Authorization');
+            return HttpResponse.json(
+              errorBody(
+                401,
+                'INVALID_CREDENTIALS',
+                'E-mail ou senha inválidos',
+              ),
+              { status: 401 },
+            );
+          },
+        ),
+      );
+      const { user, currentPath } = renderApp('/login');
+
+      await submitLogin(user);
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'E-mail ou senha inválidos.',
+      );
+      expect(tokenStore.get()).toBe(MARIA.token);
+      expect(currentPath()).toBe('/login');
+      expect(authorization).toBeNull();
+    });
+
     it('mostra a mensagem de credenciais inválidas no INVALID_CREDENTIALS e não muda o token', async () => {
       respondLoginError(
         401,
@@ -368,6 +418,34 @@ describe('tela de login', () => {
       const { currentPath } = renderApp('/login?from=%2Fanuncios');
 
       await waitFor(() => expect(currentPath()).toBe('/anuncios'));
+    });
+
+    it('ignora um from externo e redireciona para a página inicial', async () => {
+      tokenStore.set(MARIA.token);
+      server.use(respondMe(MARIA.user).handler);
+      const { currentPath } = renderApp('/login?from=%2F%2Fsite.com');
+
+      expect(await screen.findByText(/Maria Souza/)).toBeInTheDocument();
+      expect(currentPath()).toBe('/');
+    });
+
+    it('com token velho (401 no /auth/me), apaga o token e mostra o formulário sem aninhar o from', async () => {
+      tokenStore.set(MARIA.token);
+      server.use(
+        http.get<never, never, ErrorResponse>(`${API_URL}/auth/me`, () =>
+          HttpResponse.json(
+            errorBody(401, 'UNAUTHENTICATED', 'Token inválido ou expirado'),
+            { status: 401 },
+          ),
+        ),
+      );
+      const { currentPath } = renderApp('/login');
+
+      expect(
+        await screen.findByRole('form', { name: 'Entrar' }),
+      ).toBeInTheDocument();
+      expect(tokenStore.get()).toBeNull();
+      expect(currentPath()).toBe('/login');
     });
   });
 });

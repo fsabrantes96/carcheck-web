@@ -1,5 +1,6 @@
 import { QueryClientProvider } from '@tanstack/react-query';
 import { render } from '@testing-library/react';
+import { StrictMode } from 'react';
 import userEvent from '@testing-library/user-event';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { registerSessionHandlers } from '../features/auth/session';
@@ -8,7 +9,7 @@ import { routes } from '../routes';
 import { trackQueryClient } from './pendingQueries';
 
 /**
- * Monta o app como no main.tsx (mesmas rotas, QueryClient e
+ * Monta o app como no main.tsx (StrictMode, mesmas rotas, QueryClient e
  * registerSessionHandlers), com o router em memória a partir de `path`.
  */
 export function renderApp(path: string) {
@@ -21,9 +22,11 @@ export function renderApp(path: string) {
   const user = userEvent.setup();
 
   render(
-    <QueryClientProvider client={queryClient}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>,
+    <StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <RouterProvider router={router} />
+      </QueryClientProvider>
+    </StrictMode>,
   );
 
   /** Caminho atual do router, com query e hash. */
