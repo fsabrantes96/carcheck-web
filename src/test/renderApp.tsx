@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { registerSessionHandlers } from '../features/auth/session';
 import { createQueryClient } from '../queryClient';
 import { routes } from '../routes';
+import { trackQueryClient } from './pendingQueries';
 
 /**
  * Monta o app como no main.tsx (mesmas rotas, QueryClient e
@@ -12,6 +13,8 @@ import { routes } from '../routes';
  */
 export function renderApp(path: string) {
   const queryClient = createQueryClient();
+  // O setup espera as buscas deste client terminarem no fim do teste.
+  trackQueryClient(queryClient);
   const router = createMemoryRouter(routes, { initialEntries: [path] });
   const unregister = registerSessionHandlers(router, queryClient);
   onTestFinished(unregister);

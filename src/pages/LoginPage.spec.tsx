@@ -117,6 +117,18 @@ describe('tela de login', () => {
       expect(tokenStore.get()).toBe(MARIA.token);
     });
 
+    it('busca o /auth/me uma vez só num login com sucesso', async () => {
+      const me = respondMe(MARIA.user);
+      server.use(loginByEmail(MARIA), me.handler);
+      const { user, queryClient } = renderApp('/login');
+
+      await submitLogin(user);
+      await screen.findByText(/Maria Souza/);
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      expect(me.calls()).toBe(1);
+    });
+
     it('não deixa a senha no cache de mutations depois do login', async () => {
       server.use(loginByEmail(MARIA), respondMe(MARIA.user).handler);
       const { user, queryClient } = renderApp('/login');
