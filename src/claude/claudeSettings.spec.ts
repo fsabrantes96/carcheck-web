@@ -317,25 +317,64 @@ function allowedTools(shell: Shell): string[] {
   });
 }
 
-const FENCE = /^\s*```[^\n]*\n([\s\S]*?)^\s*```/gm;
+// Bloco de código: abre com 3 ou mais crases ou tis (a linha de abertura não
+// tem outro caractere da cerca depois dela) e fecha com o mesmo caractere,
+// comprimento maior ou igual ao da abertura e só espaços depois. Sem
+// fechamento, vai até o fim do texto (como no CommonMark). O recuo é [ \t]*,
+// não \s*, para o marcador não atravessar linhas. Grupos: 1 cerca, 2
+// caractere, 3 conteúdo.
+const FENCE =
+  /^[ \t]*((`|~)\2{2,})(?:(?!\2)[^\n])*\n([\s\S]*?)(?:^[ \t]*\1\2*[ \t]*$|(?![\s\S]))/gm;
 
-function codeBlockLines(): string[] {
-  return [...skill.matchAll(FENCE)].flatMap((block) =>
-    (block[1] ?? '').split('\n').map((line) => line.trim()),
+function codeBlockLines(text: string = skill): string[] {
+  return [...text.matchAll(FENCE)].flatMap((block) =>
+    (block[3] ?? '').split('\n').map((line) => line.trim()),
   );
 }
 
-function inlineCode(): string[] {
-  const withoutBlocks = skill.replace(FENCE, '');
+function inlineCode(text: string = skill): string[] {
+  const withoutBlocks = text.replace(FENCE, '');
   return [...withoutBlocks.matchAll(/`([^`\n]+)`/g)].map(
     (match) => match[1] ?? '',
   );
 }
 
-const isDiffOfMain = (command: string): boolean =>
-  command.startsWith('git diff') && command.includes('main');
+// Prompt de terminal ("$ ") no começo de um comando citado.
+const PROMPT = /^\$[ \t]+/;
 
-const DIFF_FLAGS = 'git diff --no-ext-diff --no-textconv ';
+// Subcomandos do git que sempre produzem diff, e os que só produzem com opção.
+// "git -c" (opção global, antes do subcomando) não é o -c do log: o comando
+// precisa começar por "git log", "git whatchanged" ou "git stash list".
+const ALWAYS_DIFF =
+  /^(git (?:diff|show|format-patch|range-diff|diff-tree|stash show))(?:\s|$)/;
+const DIFF_WITH_OPTION =
+  /^(git (?:log|whatchanged|stash list))\s(?:.*\s)?(?:-p|-u|-c|--cc|-U\d*|--unified|--patch(?:-with-(?:stat|raw))?|--stat|--numstat|--word-diff|--color-words|-L\S*)(?:[\s=]|$)/;
+
+const withoutPrompt = (command: string): string =>
+  command.trim().replace(PROMPT, '');
+
+// Devolve o subcomando ("git diff", "git stash show"...) se o comando produz
+// diff, ou null.
+function diffSubcommand(command: string): string | null {
+  const text = withoutPrompt(command);
+  return (ALWAYS_DIFF.exec(text) ?? DIFF_WITH_OPTION.exec(text))?.[1] ?? null;
+}
+
+const producesDiff = (command: string): boolean =>
+  diffSubcommand(command) !== null;
+
+// O subcomando vem logo seguido de --no-ext-diff --no-textconv.
+function hasDiffFlags(command: string): boolean {
+  const text = withoutPrompt(command);
+  const subcommand = diffSubcommand(text);
+  if (subcommand === null) return false;
+  const flagged = `${subcommand} --no-ext-diff --no-textconv`;
+  return text === flagged || text.startsWith(`${flagged} `);
+}
+
+// Trechos inline que citam um comando de diff em texto corrido, sem ser um
+// comando a rodar. Só valem com o trecho inteiro igual (match exato).
+const INLINE_PROSE_MENTIONS = ['git diff', 'git diff --output'];
 
 describe('settings.json do Claude Code', () => {
   it('tem o SHA256 fixado em SETTINGS_SHA256 (constante deste repositório; a igualdade com o carcheck-api é conferida à mão)', async () => {
@@ -505,6 +544,143 @@ describe('auto-teste do matcher aproximado (não é o matcher do Claude Code)', 
   );
 });
 
+describe('auto-teste do predicado de comandos que produzem diff', () => {
+  it.each<[string, boolean]>([
+    ['git diff main...HEAD', true],
+    ['git show HEAD', true],
+    ['git format-patch main', true],
+    ['git range-diff main...HEAD', true],
+    ['git diff-tree HEAD', true],
+    ['git stash show', true],
+    ['git log -p', true],
+    ['git log -u main..HEAD', true],
+    ['git log --patch', true],
+    ['git log --oneline --stat main..HEAD', true],
+    ['git log --stat=80', true],
+    ['git log --numstat', true],
+    ['git whatchanged -p', true],
+    ['git log --oneline main..HEAD', false],
+    ['git log --pretty=%p', false],
+    ['git whatchanged --oneline', false],
+    ['git difftool main', false],
+    ['git grep -c "it(" main -- "*.spec.ts"', false],
+    ['git status --porcelain', false],
+    // -U<n>
+    ['git log -U3 main..HEAD', true],
+    ['git log --format=-U3', false],
+    // --unified
+    ['git log --unified=5', true],
+    ['git log --unifiedx', false],
+    // --word-diff
+    ['git log --word-diff=color', true],
+    ['git log --word-diffs', false],
+    // --color-words
+    ['git log --color-words', true],
+    ['git log --color', false],
+    // --cc
+    ['git log --cc', true],
+    ['git log --cc-x', false],
+    // -c do log, que não é o -c global do git
+    ['git log -c', true],
+    ['git -c diff.external=x log --oneline', false],
+    // -L
+    ['git log -L 1,5:src/main.tsx', true],
+    ['git log -L1,5:src/main.tsx', true],
+    ['git log --left-right', false],
+    // --patch-with-stat e --patch-with-raw
+    ['git log --patch-with-stat', true],
+    ['git log --patch-with-raw', true],
+    ['git log --patch-with-statx', false],
+    // git stash list com opção de diff
+    ['git stash list -p', true],
+    ['git stash list', false],
+    // prefixo de prompt "$ "
+    ['$ git diff main...HEAD', true],
+    ['$ git status', false],
+    ['$git diff main...HEAD', false],
+  ])('%j produz diff: %s', (command, expected) => {
+    expect(producesDiff(command)).toBe(expected);
+  });
+
+  it.each<[string, boolean]>([
+    ['git diff --no-ext-diff --no-textconv main...HEAD', true],
+    ['git stash show --no-ext-diff --no-textconv', true],
+    ['git log --no-ext-diff --no-textconv -p', true],
+    ['git stash list --no-ext-diff --no-textconv -p', true],
+    ['$ git diff --no-ext-diff --no-textconv main...HEAD', true],
+    ['git diff main...HEAD --no-ext-diff --no-textconv', false],
+    ['git show --no-ext-diff HEAD', false],
+    ['git diff --no-ext-diff --no-textconvx main', false],
+    ['git log -U3', false],
+    ['$ git diff main...HEAD', false],
+  ])('%j tem as flags logo depois do subcomando: %s', (command, expected) => {
+    expect(hasDiffFlags(command)).toBe(expected);
+  });
+});
+
+describe('auto-teste da leitura de blocos de código', () => {
+  const blockLines = (lines: string[]): string[] =>
+    codeBlockLines(lines.join('\n')).filter((line) => line !== '');
+
+  it('lê blocos com ~~~ e com ```', () => {
+    expect(
+      blockLines([
+        '~~~powershell',
+        'git status',
+        '~~~',
+        '',
+        '```',
+        'npm test',
+        '```',
+      ]),
+    ).toEqual(['git status', 'npm test']);
+  });
+
+  it('um bloco aberto com ``` não fecha com ~~~', () => {
+    expect(blockLines(['```', 'git status', '~~~', 'npm test', '```'])).toEqual(
+      ['git status', '~~~', 'npm test'],
+    );
+  });
+
+  it('um bloco aberto com 4 crases não fecha com 3 crases', () => {
+    expect(
+      blockLines(['````md', '```', 'git diff main', '```', '````']),
+    ).toEqual(['```', 'git diff main', '```']);
+  });
+
+  it('um fechamento mais longo que a abertura fecha o bloco', () => {
+    const text = ['```', 'git status', '````', 'Rode `npm test`.'].join('\n');
+    expect(codeBlockLines(text).filter((line) => line !== '')).toEqual([
+      'git status',
+    ]);
+    expect(inlineCode(text)).toEqual(['npm test']);
+  });
+
+  it('uma linha de fechamento com texto depois não fecha o bloco', () => {
+    expect(
+      blockLines(['```', 'git status', '``` depois', 'npm test', '```']),
+    ).toEqual(['git status', '``` depois', 'npm test']);
+  });
+
+  it('um bloco sem fechamento vai até o fim do texto', () => {
+    const text = ['```', 'git status', '`git diff main`'].join('\n');
+    expect(codeBlockLines(text).filter((line) => line !== '')).toEqual([
+      'git status',
+      '`git diff main`',
+    ]);
+    expect(inlineCode(text)).toEqual([]);
+  });
+
+  it('uma linha com crases depois da cerca de abertura não abre bloco', () => {
+    expect(blockLines(['```x``` texto', 'git diff main'])).toEqual([]);
+  });
+
+  it('código inline fora dos blocos não inclui o conteúdo dos blocos', () => {
+    const text = ['Rode `npm test`.', '~~~', '`git status`', '~~~'].join('\n');
+    expect(inlineCode(text)).toEqual(['npm test']);
+  });
+});
+
 describe('allowed-tools e comandos da skill ship-pr', () => {
   it('toda linha do allowed-tools é uma regra reconhecida, entre aspas simples e com dois espaços de recuo', () => {
     expect(
@@ -563,31 +739,34 @@ describe('allowed-tools e comandos da skill ship-pr', () => {
     expect(count).toBe(7);
   });
 
-  it('todo git diff contra a main no allowed-tools usa --no-ext-diff --no-textconv', () => {
+  it('todo comando que produz diff no allowed-tools usa --no-ext-diff --no-textconv', () => {
     const diffs = [
       ...allowedTools('Bash'),
       ...allowedTools('PowerShell'),
-    ].filter(isDiffOfMain);
+    ].filter(producesDiff);
     expect(diffs).toHaveLength(6);
-    expect(diffs.filter((command) => !command.startsWith(DIFF_FLAGS))).toEqual(
-      [],
-    );
+    expect(diffs.filter((command) => !hasDiffFlags(command))).toEqual([]);
   });
 
-  it('todo git diff contra a main nos blocos de código usa --no-ext-diff --no-textconv', () => {
-    const diffs = codeBlockLines().filter(isDiffOfMain);
+  it('todo comando que produz diff nos blocos de código usa --no-ext-diff --no-textconv', () => {
+    const diffs = codeBlockLines().filter(producesDiff);
     expect(diffs).toHaveLength(2);
-    expect(diffs.filter((command) => !command.startsWith(DIFF_FLAGS))).toEqual(
-      [],
-    );
+    expect(diffs.filter((command) => !hasDiffFlags(command))).toEqual([]);
   });
 
-  it('todo git diff contra a main no código inline usa --no-ext-diff --no-textconv', () => {
-    const diffs = inlineCode().filter(isDiffOfMain);
-    expect(diffs).toHaveLength(1);
-    expect(diffs.filter((command) => !command.startsWith(DIFF_FLAGS))).toEqual(
-      [],
+  it('todo comando que produz diff no código inline usa --no-ext-diff --no-textconv (fora as menções em texto corrido)', () => {
+    const diffs = inlineCode().filter(
+      (code) => producesDiff(code) && !INLINE_PROSE_MENTIONS.includes(code),
     );
+    expect(diffs).toHaveLength(1);
+    expect(diffs.filter((command) => !hasDiffFlags(command))).toEqual([]);
+  });
+
+  it('as menções em texto corrido liberadas ainda existem no código inline', () => {
+    const inline = inlineCode();
+    expect(
+      INLINE_PROSE_MENTIONS.filter((mention) => !inline.includes(mention)),
+    ).toEqual([]);
   });
 
   it('o passo 6 cita o comando do diff por extenso', () => {
