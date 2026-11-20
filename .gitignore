@@ -22,6 +22,9 @@ npm-debug.log*
 Thumbs.db
 desktop.ini
 
+# Claude Code: permissões locais de cada pessoa (não versionar)
+.claude/settings.local.json
+
 # Temporários
 .temp
 .tmp
