@@ -38,8 +38,44 @@ interface Settings {
 const SETTINGS_SHA256 =
   'EEABAE62242DEFDABD8E4AC41B2E92B0935043EE5E9F8531DF1A089359EF535C';
 
-// Entradas do allowed-tools da ship-pr, por shell.
-const ALLOWED_TOOLS_PER_SHELL = 16;
+// Comandos do allowed-tools da ship-pr, os mesmos em Bash e em PowerShell.
+const SHIP_PR_ALLOWED_COMMANDS = [
+  'git branch --show-current',
+  'gh auth status',
+  'git status --porcelain',
+  'git rev-parse HEAD',
+  'npm run lint',
+  'npm run typecheck',
+  'npm test',
+  'npm run build',
+  'npm run api:check',
+  'git diff --no-ext-diff --no-textconv -w main...HEAD -- "*.spec.ts" "*.spec.tsx"',
+  'git diff --no-ext-diff --no-textconv --name-only main...HEAD',
+  'git diff --no-ext-diff --no-textconv main...HEAD',
+  'git log --oneline main..HEAD',
+  'git grep -c "it(" main -- "*.spec.ts" "*.spec.tsx"',
+  'git grep -c "it(" -- "*.spec.ts" "*.spec.tsx"',
+  'gh pr view * --json url',
+];
+
+// Chaves de topo do frontmatter da ship-pr, em ordem alfabética.
+const SHIP_PR_FRONTMATTER_KEYS = [
+  'allowed-tools',
+  'description',
+  'disable-model-invocation',
+  'name',
+];
+
+// SHA256 do frontmatter da ship-pr (o texto entre o --- da primeira linha e o
+// --- de fechamento, sem eles), com \r\n trocado por \n, em maiúsculas. Fecha
+// o que o parse por regex não vê (comentário na coluna 0 no meio do
+// allowed-tools, chave entre aspas). É própria deste repositório: o
+// allowed-tools da ship-pr do carcheck-api é outro, então o hash também.
+const SHIP_PR_FRONTMATTER_SHA256 =
+  '07EE71B86EBC1517FAC51921AC976293A7DDCD3D116DEB9B015722EDFC54DE61';
+
+// Frontmatter: abre na primeira linha e fecha com uma linha que é só ---.
+const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/;
 
 const lf = (text: string): string => text.replace(/\r\n/g, '\n');
 
@@ -61,6 +97,16 @@ async function sha256(text: string): Promise<string> {
 
 const settings = JSON.parse(settingsText) as Settings;
 const { deny, ask } = settings.permissions;
+
+// Devolve o frontmatter da ship-pr; sem o --- de fechamento, lança erro, e
+// todo teste que depende dele falha.
+function frontmatter(): string {
+  const match = FRONTMATTER.exec(skill);
+  if (match?.[1] === undefined) {
+    throw new Error('SKILL.md da ship-pr sem frontmatter fechado por ---');
+  }
+  return match[1];
+}
 
 const RULE = /^(Bash|PowerShell)\((.*)\)$/s;
 
@@ -254,8 +300,7 @@ const MUST_ASK = BRANCHES.flatMap((branch) => [
 ]);
 
 function allowedToolsBlock(): string[] {
-  const frontmatter = skill.split(/^---$/m)[1] ?? '';
-  const block = frontmatter.split(/^allowed-tools:\s*$/m)[1] ?? '';
+  const block = frontmatter().split(/^allowed-tools:\s*$/m)[1] ?? '';
   const lines = block.split('\n');
   const end = lines.findIndex((line, index) => index > 0 && /^\S/.test(line));
   return (end === -1 ? lines : lines.slice(0, end)).filter(
@@ -468,11 +513,32 @@ describe('allowed-tools e comandos da skill ship-pr', () => {
   });
 
   it.each(SHELLS)(
-    `em %s, tem ${ALLOWED_TOOLS_PER_SHELL} entradas no allowed-tools`,
+    'o allowed-tools de %s é exatamente a lista SHIP_PR_ALLOWED_COMMANDS',
     (shell) => {
-      expect(allowedTools(shell)).toHaveLength(ALLOWED_TOOLS_PER_SHELL);
+      expect(allowedTools(shell)).toEqual(SHIP_PR_ALLOWED_COMMANDS);
     },
   );
+
+  it('o frontmatter abre na primeira linha e fecha com uma linha ---', () => {
+    expect(FRONTMATTER.exec(skill)).not.toBeNull();
+  });
+
+  it('o frontmatter tem o SHA256 fixado em SHIP_PR_FRONTMATTER_SHA256 (constante deste repositório)', async () => {
+    expect(await sha256(frontmatter())).toBe(SHIP_PR_FRONTMATTER_SHA256);
+  });
+
+  it('o frontmatter tem só as chaves esperadas, cada uma uma vez', () => {
+    const keys = frontmatter()
+      .split('\n')
+      .flatMap((line) => /^([A-Za-z][\w-]*):/.exec(line)?.[1] ?? []);
+    expect(keys.sort()).toEqual(SHIP_PR_FRONTMATTER_KEYS);
+  });
+
+  it('o frontmatter tem disable-model-invocation: true', () => {
+    expect(frontmatter().split('\n')).toContain(
+      'disable-model-invocation: true',
+    );
+  });
 
   it('nenhuma regra do allowed-tools termina em :*', () => {
     expect(
@@ -490,10 +556,6 @@ describe('allowed-tools e comandos da skill ship-pr', () => {
       return separator === -1 || pattern.indexOf('*') < separator;
     });
     expect(misplaced).toEqual([]);
-  });
-
-  it('lista os mesmos comandos em Bash e em PowerShell', () => {
-    expect(allowedTools('Bash')).toEqual(allowedTools('PowerShell'));
   });
 
   it.each(SHELLS)('em %s, tem 7 curingas no allowed-tools', (shell) => {
