@@ -137,8 +137,9 @@ function matching(rules: string[], shell: Shell, command: string): string[] {
   );
 }
 
-// Regras de shell que este endurecimento acrescenta ao deny (cada uma em par).
-const NEW_DENY = [
+// Regras de shell do endurecimento das permissões que o deny precisa ter, nos
+// dois shells.
+const HARDENED_DENY = [
   'git push *--ta*',
   'git push *--fol*',
   'git push *tags/*',
@@ -151,7 +152,6 @@ const NEW_DENY = [
   'git remote add*',
   'git remote set-url*',
   'git remote rename*',
-  'git credential*',
   'git-credential*',
   'gh auth git-credential*',
   'gh auth login*',
@@ -170,8 +170,9 @@ const NEW_DENY = [
   'gh auth status * -*',
 ];
 
-// Regras que saem do ask (o deny passa a cobri-las).
-const REMOVED_ASK = [
+// Regras que o deny já cobre (algumas não literalmente, por exemplo via
+// `git -*`) e que não podem voltar ao ask.
+const FORBIDDEN_IN_ASK = [
   'git -c *',
   'git -C * push*',
   'git --git-dir* push*',
@@ -183,13 +184,14 @@ const REMOVED_ASK = [
   'gh.exe *',
 ];
 
-// Push que já estava no deny e continua lá.
-const KEPT_DENY = [
+// Regras de base do deny (push e credenciais), anteriores ao endurecimento.
+const BASELINE_DENY = [
   'git push --mirror*',
   'git push * --mirror*',
   'git push --all*',
   'git push * --all*',
   'git push *:chore/*',
+  'git credential*',
 ];
 
 const EDIT_DENY = [
@@ -424,11 +426,11 @@ describe('settings.json do Claude Code', () => {
   });
 
   it.each(SHELLS)(
-    'em %s, tem no deny as regras novas e as de push que já existiam',
+    'em %s, tem no deny as regras endurecidas e as de base',
     (shell) => {
       const denied = shellRules(deny, shell);
       expect(
-        [...NEW_DENY, ...KEPT_DENY].filter(
+        [...HARDENED_DENY, ...BASELINE_DENY].filter(
           (pattern) => !denied.includes(pattern),
         ),
       ).toEqual([]);
@@ -436,12 +438,12 @@ describe('settings.json do Claude Code', () => {
   );
 
   it.each(SHELLS)(
-    'em %s, tirou do ask as regras que o deny passou a cobrir',
+    'em %s, não tem no ask as regras que o deny já cobre',
     (shell) => {
       const asked = shellRules(ask, shell);
-      expect(REMOVED_ASK.filter((pattern) => asked.includes(pattern))).toEqual(
-        [],
-      );
+      expect(
+        FORBIDDEN_IN_ASK.filter((pattern) => asked.includes(pattern)),
+      ).toEqual([]);
     },
   );
 
@@ -488,11 +490,6 @@ describe('settings.json do Claude Code', () => {
       );
     });
 
-    it('o matcher aproximado diferencia maiúsculas no Bash: GIT CONFIG e GIT.EXE não casam com nenhum deny (lacuna do risco 11)', () => {
-      expect(matching(deny, 'Bash', 'GIT CONFIG user.name')).toEqual([]);
-      expect(matching(deny, 'Bash', 'GIT.EXE push origin chore/x')).toEqual([]);
-    });
-
     it.each(SHELLS)(
       'em %s, nenhum comando do allowed-tools da ship-pr casa com um deny',
       (shell) => {
@@ -534,6 +531,12 @@ describe('auto-teste do matcher aproximado (não é o matcher do Claude Code)', 
     ['git push * -d *', 'git push origin -d', 'Bash', false],
     ['git config*', 'GIT CONFIG x', 'Bash', false],
     ['git config*', 'GIT CONFIG x', 'PowerShell', true],
+    // Lacuna do risco 11: no Bash, GIT CONFIG e GIT.EXE em maiúsculas não
+    // casam. Fica no auto-teste, sem usar o deny real, para não congelar a
+    // lacuna no settings.json.
+    ['git config*', 'GIT CONFIG user.name', 'Bash', false],
+    ['git.exe*', 'GIT.EXE push origin chore/x', 'Bash', false],
+    ['git.exe*', 'GIT.EXE push', 'PowerShell', true],
     ['a.b+c(d)*', 'a.b+c(d) x', 'Bash', true],
     ['a.b+c(d)*', 'aXb+c(d) x', 'Bash', false],
   ])(
@@ -797,8 +800,13 @@ describe('allowed-tools e comandos da skill ship-pr', () => {
     expect(skill).toContain(
       'em 2026-11-15, as regras `ask` foram aprovadas sem perguntar no modo auto; no teste de 2026-11-19 (no back) pediram permissão, como diz a documentação. Por isso esta skill deve rodar no modo padrão.',
     );
-    expect(skill).not.toContain(
-      'no modo auto as regras `ask` são aprovadas sem perguntar',
-    );
+    // Os mesmos trechos proibidos do spec do back. O segundo contém o trecho
+    // que este teste já proibia ("... são aprovadas sem perguntar").
+    for (const stale of [
+      'diz o contrário',
+      'no modo auto as regras `ask` são aprovadas',
+    ]) {
+      expect(skill, stale).not.toContain(stale);
+    }
   });
 });
