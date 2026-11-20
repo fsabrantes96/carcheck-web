@@ -1,6 +1,6 @@
 // @vitest-environment node
-import settingsText from '../../.claude/settings.json?raw';
-import skill from '../../.claude/skills/ship-pr/SKILL.md?raw';
+import settingsRaw from '../../.claude/settings.json?raw';
+import skillRaw from '../../.claude/skills/ship-pr/SKILL.md?raw';
 
 // Especificação do .claude/settings.json e do allowed-tools da skill ship-pr
 // (risco 11 do docs/audit.md; registro principal no risco 57 do back).
@@ -20,6 +20,8 @@ import skill from '../../.claude/skills/ship-pr/SKILL.md?raw';
 // para outro. Ele lê a cópia de trabalho (uma edição não commitada é o que vai
 // ser testado) e não considera o .claude/settings.local.json, que também afeta
 // as permissões. O .claude/settings.json tem que ser idêntico ao do back.
+// Os arquivos são lidos com \r\n trocado por \n, para que um checkout com CRLF
+// não mude o resultado (o `?raw` entrega o texto com \r\n, se o arquivo tiver).
 
 type Shell = 'Bash' | 'PowerShell';
 const SHELLS: Shell[] = ['Bash', 'PowerShell'];
@@ -28,8 +30,34 @@ interface Settings {
   permissions: { allow?: string[]; deny: string[]; ask: string[] };
 }
 
+// SHA256 do .claude/settings.json, com \r\n trocado por \n, em maiúsculas como
+// o (Get-FileHash .claude/settings.json).Hash. O arquivo precisa ser idêntico
+// no carcheck-web e no carcheck-api: mudou o settings, atualize esta constante
+// nos dois repositórios. Este spec só trava a constante deste repositório; a
+// igualdade com o carcheck-api é conferida à mão, com o Get-FileHash nos dois.
+const SETTINGS_SHA256 =
+  'EEABAE62242DEFDABD8E4AC41B2E92B0935043EE5E9F8531DF1A089359EF535C';
+
 // Entradas do allowed-tools da ship-pr, por shell.
 const ALLOWED_TOOLS_PER_SHELL = 16;
+
+const lf = (text: string): string => text.replace(/\r\n/g, '\n');
+
+const settingsText = lf(settingsRaw);
+const skill = lf(skillRaw);
+
+// SHA256 em hexadecimal maiúsculo. Usa o crypto.subtle (tipado pelo lib DOM)
+// porque o tsconfig.app.json não tem os tipos do Node.
+async function sha256(text: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(text),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+    .toUpperCase();
+}
 
 const settings = JSON.parse(settingsText) as Settings;
 const { deny, ask } = settings.permissions;
@@ -265,6 +293,10 @@ const isDiffOfMain = (command: string): boolean =>
 const DIFF_FLAGS = 'git diff --no-ext-diff --no-textconv ';
 
 describe('settings.json do Claude Code', () => {
+  it('tem o SHA256 fixado em SETTINGS_SHA256 (constante deste repositório; a igualdade com o carcheck-api é conferida à mão)', async () => {
+    expect(await sha256(settingsText)).toBe(SETTINGS_SHA256);
+  });
+
   it('não tem regras allow', () => {
     expect(settings.permissions.allow).toBeUndefined();
   });
