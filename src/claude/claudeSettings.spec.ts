@@ -2,8 +2,9 @@
 import settingsRaw from '../../.claude/settings.json?raw';
 import skillRaw from '../../.claude/skills/ship-pr/SKILL.md?raw';
 
-// Especificação do .claude/settings.json e do allowed-tools da skill ship-pr
-// (risco 11 do docs/audit.md; registro principal no risco 57 do back).
+// Especificação do .claude/settings.json e da skill ship-pr (arquivo inteiro,
+// frontmatter, allowed-tools, comandos citados e frase do modo auto) (risco 11
+// do docs/audit.md; registro principal no risco 57 do back).
 //
 // ATENÇÃO: o matcher abaixo é uma aproximação da sintaxe documentada em
 // https://code.claude.com/docs/en/permissions (todo `*` casa qualquer texto,
@@ -19,8 +20,9 @@ import skillRaw from '../../.claude/skills/ship-pr/SKILL.md?raw';
 // a este arquivo (imports `?raw` do Vite), sem variável nem opção que aponte
 // para outro. Ele lê a cópia de trabalho (uma edição não commitada é o que vai
 // ser testado) e não considera o .claude/settings.local.json, que também afeta
-// as permissões. O .claude/settings.json tem que ser idêntico ao do back.
-// Os arquivos são lidos com \r\n trocado por \n, para que um checkout com CRLF
+// as permissões. O .claude/settings.json tem que ser idêntico ao do back, mas
+// este spec só confere a constante deste repositório: a igualdade com o back é
+// conferida à mão. Os arquivos são lidos com \r\n trocado por \n, para que um checkout com CRLF
 // não mude o resultado (o `?raw` entrega o texto com \r\n, se o arquivo tiver).
 
 type Shell = 'Bash' | 'PowerShell';
@@ -73,6 +75,16 @@ const SHIP_PR_FRONTMATTER_KEYS = [
 // allowed-tools da ship-pr do carcheck-api é outro, então o hash também.
 const SHIP_PR_FRONTMATTER_SHA256 =
   '07EE71B86EBC1517FAC51921AC976293A7DDCD3D116DEB9B015722EDFC54DE61';
+
+// SHA256 da SKILL.md da ship-pr inteira, com \r\n trocado por \n, em
+// maiúsculas como o (Get-FileHash .claude/skills/ship-pr/SKILL.md).Hash. Trava
+// o corpo da skill (regra de parada, aprovação explícita, lista do que é
+// proibido, comandos em texto corrido), que as verificações por regex abaixo
+// não cobrem por inteiro. É própria deste repositório: a ship-pr do
+// carcheck-api é outra. A skill é editada à mão pelo usuário; atualize esta
+// constante no mesmo commit.
+const SHIP_PR_SKILL_SHA256 =
+  '32E22BB2F2832D3D522FAB354F161D2C9EBB0347866E0D02B97A19F4295A1957';
 
 // Frontmatter: abre na primeira linha e fecha com uma linha que é só ---.
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/;
@@ -319,12 +331,13 @@ function allowedTools(shell: Shell): string[] {
   });
 }
 
-// Bloco de código: abre com 3 ou mais crases ou tis (a linha de abertura não
-// tem outro caractere da cerca depois dela) e fecha com o mesmo caractere,
-// comprimento maior ou igual ao da abertura e só espaços depois. Sem
-// fechamento, vai até o fim do texto (como no CommonMark). O recuo é [ \t]*,
-// não \s*, para o marcador não atravessar linhas. Grupos: 1 cerca, 2
-// caractere, 3 conteúdo.
+// Bloco de código: abre com 3 ou mais crases ou tis e fecha com o mesmo
+// caractere, comprimento maior ou igual ao da abertura e só espaços depois.
+// Sem fechamento, vai até o fim do texto (como no CommonMark). A linha de
+// abertura não pode ter outro caractere da cerca depois dela: para crases é a
+// regra do CommonMark; para tis é mais estrito que o CommonMark (que aceita
+// ~ na info string de uma cerca de tis). O recuo é [ \t]*, não \s*, para o
+// marcador não atravessar linhas. Grupos: 1 cerca, 2 caractere, 3 conteúdo.
 const FENCE =
   /^[ \t]*((`|~)\2{2,})(?:(?!\2)[^\n])*\n([\s\S]*?)(?:^[ \t]*\1\2*[ \t]*$|(?![\s\S]))/gm;
 
@@ -365,18 +378,29 @@ function diffSubcommand(command: string): string | null {
 const producesDiff = (command: string): boolean =>
   diffSubcommand(command) !== null;
 
-// O subcomando vem logo seguido de --no-ext-diff --no-textconv.
+// Opção que reativa o diff externo ou o textconv (no git vale a última opção),
+// inclusive abreviada: qualquer token que comece por --text ou --ext. Pega
+// também o --text (-a) do diff, que é inofensivo: erra para o lado seguro.
+const REENABLES_DIFF_PROGRAM = /(?:^|\s)--(?:text|ext)/;
+
+// O subcomando vem logo seguido de --no-ext-diff --no-textconv, e nada depois
+// reativa o diff externo ou o textconv.
 function hasDiffFlags(command: string): boolean {
   const text = withoutPrompt(command);
   const subcommand = diffSubcommand(text);
   if (subcommand === null) return false;
   const flagged = `${subcommand} --no-ext-diff --no-textconv`;
-  return text === flagged || text.startsWith(`${flagged} `);
+  if (text !== flagged && !text.startsWith(`${flagged} `)) return false;
+  return !REENABLES_DIFF_PROGRAM.test(text.slice(flagged.length));
 }
 
 // Trechos inline que citam um comando de diff em texto corrido, sem ser um
-// comando a rodar. Só valem com o trecho inteiro igual (match exato).
-const INLINE_PROSE_MENTIONS = ['git diff', 'git diff --output'];
+// comando a rodar, com o número exato de ocorrências. Só valem com o trecho
+// inteiro igual (match exato); uma ocorrência a mais falha o spec.
+const INLINE_PROSE_MENTIONS: Record<string, number> = {
+  'git diff': 1,
+  'git diff --output': 1,
+};
 
 describe('settings.json do Claude Code', () => {
   it('tem o SHA256 fixado em SETTINGS_SHA256 (constante deste repositório; a igualdade com o carcheck-api é conferida à mão)', async () => {
@@ -529,12 +553,11 @@ describe('auto-teste do matcher aproximado (não é o matcher do Claude Code)', 
     ['git push *', 'git pushx', 'Bash', false],
     ['ls*', 'lsof', 'Bash', true],
     ['git push * -d *', 'git push origin -d', 'Bash', false],
-    ['git config*', 'GIT CONFIG x', 'Bash', false],
-    ['git config*', 'GIT CONFIG x', 'PowerShell', true],
     // Lacuna do risco 11: no Bash, GIT CONFIG e GIT.EXE em maiúsculas não
     // casam. Fica no auto-teste, sem usar o deny real, para não congelar a
     // lacuna no settings.json.
-    ['git config*', 'GIT CONFIG user.name', 'Bash', false],
+    ['git config*', 'GIT CONFIG x', 'Bash', false],
+    ['git config*', 'GIT CONFIG x', 'PowerShell', true],
     ['git.exe*', 'GIT.EXE push origin chore/x', 'Bash', false],
     ['git.exe*', 'GIT.EXE push', 'PowerShell', true],
     ['a.b+c(d)*', 'a.b+c(d) x', 'Bash', true],
@@ -616,6 +639,12 @@ describe('auto-teste do predicado de comandos que produzem diff', () => {
     ['git diff --no-ext-diff --no-textconvx main', false],
     ['git log -U3', false],
     ['$ git diff main...HEAD', false],
+    // Opção depois das flags que reativa o textconv ou o diff externo.
+    ['git diff --no-ext-diff --no-textconv main...HEAD --textconv', false],
+    ['git diff --no-ext-diff --no-textconv --textc main...HEAD', false],
+    ['git log --no-ext-diff --no-textconv -p --ext-diff', false],
+    ['git show --no-ext-diff --no-textconv --ext HEAD', false],
+    ['git diff --no-ext-diff --no-textconv main...HEAD -- "*.text.ts"', true],
   ])('%j tem as flags logo depois do subcomando: %s', (command, expected) => {
     expect(hasDiffFlags(command)).toBe(expected);
   });
@@ -678,6 +707,18 @@ describe('auto-teste da leitura de blocos de código', () => {
     expect(blockLines(['```x``` texto', 'git diff main'])).toEqual([]);
   });
 
+  it('lê um bloco recuado dentro de um item de lista', () => {
+    expect(
+      blockLines([
+        '1. Passo:',
+        '',
+        '   ```powershell',
+        '   git push -u origin x',
+        '   ```',
+      ]),
+    ).toEqual(['git push -u origin x']);
+  });
+
   it('código inline fora dos blocos não inclui o conteúdo dos blocos', () => {
     const text = ['Rode `npm test`.', '~~~', '`git status`', '~~~'].join('\n');
     expect(inlineCode(text)).toEqual(['npm test']);
@@ -704,6 +745,13 @@ describe('allowed-tools e comandos da skill ship-pr', () => {
 
   it('o frontmatter tem o SHA256 fixado em SHIP_PR_FRONTMATTER_SHA256 (constante deste repositório)', async () => {
     expect(await sha256(frontmatter())).toBe(SHIP_PR_FRONTMATTER_SHA256);
+  });
+
+  it('a SKILL.md inteira tem o SHA256 fixado em SHIP_PR_SKILL_SHA256 (constante deste repositório)', async () => {
+    expect(
+      await sha256(skill),
+      'a SKILL.md da ship-pr mudou: ela é editada à mão pelo usuário, e o SHIP_PR_SKILL_SHA256 deste spec é atualizado no mesmo commit',
+    ).toBe(SHIP_PR_SKILL_SHA256);
   });
 
   it('o frontmatter tem só as chaves esperadas, cada uma uma vez', () => {
@@ -759,17 +807,27 @@ describe('allowed-tools e comandos da skill ship-pr', () => {
 
   it('todo comando que produz diff no código inline usa --no-ext-diff --no-textconv (fora as menções em texto corrido)', () => {
     const diffs = inlineCode().filter(
-      (code) => producesDiff(code) && !INLINE_PROSE_MENTIONS.includes(code),
+      (code) =>
+        producesDiff(code) &&
+        !Object.keys(INLINE_PROSE_MENTIONS).includes(code),
     );
     expect(diffs).toHaveLength(1);
     expect(diffs.filter((command) => !hasDiffFlags(command))).toEqual([]);
   });
 
-  it('as menções em texto corrido liberadas ainda existem no código inline', () => {
+  it('as menções em texto corrido liberadas aparecem no código inline exatamente o número de vezes de INLINE_PROSE_MENTIONS', () => {
     const inline = inlineCode();
-    expect(
-      INLINE_PROSE_MENTIONS.filter((mention) => !inline.includes(mention)),
-    ).toEqual([]);
+    const counts = Object.fromEntries(
+      Object.keys(INLINE_PROSE_MENTIONS).map((mention) => [
+        mention,
+        inline.filter((code) => code === mention).length,
+      ]),
+    );
+    expect(counts).toEqual(INLINE_PROSE_MENTIONS);
+  });
+
+  it('os blocos de código lidos incluem o push do passo 7, que fica recuado dentro de um item de lista', () => {
+    expect(codeBlockLines()).toContain('git push -u origin <branch>');
   });
 
   it('o passo 6 cita o comando do diff por extenso', () => {
