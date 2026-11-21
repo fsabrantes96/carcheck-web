@@ -20,7 +20,8 @@ import skillRaw from '../../.claude/skills/ship-pr/SKILL.md?raw';
 // a este arquivo (imports `?raw` do Vite), sem variável nem opção que aponte
 // para outro. Ele lê a cópia de trabalho (uma edição não commitada é o que vai
 // ser testado) e não considera o .claude/settings.local.json, que também afeta
-// as permissões. O .claude/settings.json tem que ser idêntico ao do back, mas
+// as permissões (quem o confere é o passo 2 da ship-pr, na hora de publicar).
+// O .claude/settings.json tem que ser idêntico ao do back, mas
 // este spec só confere a constante deste repositório: a igualdade com o back é
 // conferida à mão. Os arquivos são lidos com \r\n trocado por \n, para que um checkout com CRLF
 // não mude o resultado (o `?raw` entrega o texto com \r\n, se o arquivo tiver).
@@ -853,6 +854,19 @@ describe('allowed-tools e comandos da skill ship-pr', () => {
       );
     },
   );
+
+  it('o passo 2 manda ler o .claude/settings.local.json e parar se tiver permissions.allow, permissions.defaultMode, hooks ou env', () => {
+    const step2 = skill.split('### 2.')[1]?.split('### 3.')[0] ?? '';
+    expect(step2).toContain(
+      'O `.claude/settings.local.json` (na raiz do repositório) está no `.gitignore`, então o `git status` não o mostra, mas ele muda as permissões e o que roda nesta sessão. Leia o arquivo com a ferramenta Read, não com um comando de shell:',
+    );
+    expect(step2).toContain(
+      '- Se ele tiver `allow` ou `defaultMode` dentro de `permissions`, ou `hooks` ou `env` na raiz, PARE, mesmo que o valor esteja vazio (`[]` ou `{}`). Mostre ao usuário só os nomes das chaves encontradas, não os valores, e devolva o controle a ele.',
+    );
+    expect(step2).toContain(
+      '- Se ele não for um JSON válido, ou se a leitura falhar por outro motivo, PARE e diga o motivo, sem citar trechos do arquivo.',
+    );
+  });
 
   it('registra os dois testes do modo auto em vez de afirmar como fato que o ask é aprovado sem perguntar', () => {
     expect(skill).toContain(
