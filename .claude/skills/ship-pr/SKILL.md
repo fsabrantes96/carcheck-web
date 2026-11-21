@@ -123,6 +123,15 @@ Se um nome parecer suspeito e não estiver nesta lista, pergunte ao usuário ant
 
 Confira também que `api/openapi.json` e `src/api/schema.d.ts` aparecem juntos na lista ou não aparecem. Se só um deles mudou, PARE e mostre (o `api:check` pega o `schema.d.ts` desatualizado, mas não um `schema.d.ts` regenerado de um contrato que não foi commitado).
 
+PARE também se a lista tiver um arquivo que muda as permissões, o comportamento do agente ou o que roda no CI, mesmo que a mudança pareça ser o objetivo da PR:
+
+- qualquer arquivo dentro de uma pasta `.claude/` ou `.agents/`, em qualquer nível do repositório;
+- `.mcp.json`;
+- qualquer arquivo dentro de `.vscode/` ou de `.github/`;
+- `.gitattributes`.
+
+Mostre ao usuário os arquivos desse grupo e devolva o controle a ele. Só siga para o passo 6 depois que ele responder, de forma explícita, que a mudança foi de propósito. Se `.claude/settings.json` ou `.claude/skills/ship-pr/SKILL.md` estiverem entre eles, a resposta precisa trazer o SHA256 de cada um, conferido por ele. Silêncio, "ok?" ou uma resposta sem o SHA256 pedido não são confirmação.
+
 ### 6. Título e descrição: ESPERE a aprovação
 
 Leia `git log --oneline main..HEAD`, o diff (`git diff --no-ext-diff --no-textconv main...HEAD`) e o `docs/audit.md`, e proponha:
