@@ -85,7 +85,7 @@ const SHIP_PR_FRONTMATTER_SHA256 =
 // carcheck-api é outra. A skill é editada à mão pelo usuário; atualize esta
 // constante no mesmo commit.
 const SHIP_PR_SKILL_SHA256 =
-  'F3532C288388A3AB7A76D30396190E86B24E47FDFF6378B005642B96FA7E9C85';
+  '9B9023A22680A002F633F7F692C34BE1889EDACB2270B9F086CD0ED9337C0783';
 
 // Frontmatter: abre na primeira linha e fecha com uma linha que é só ---.
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/;
@@ -871,12 +871,12 @@ describe('allowed-tools e comandos da skill ship-pr', () => {
   it('o passo 5 manda parar com arquivos que mudam permissões, o comportamento do agente ou o CI, e esperar a confirmação explícita do usuário', () => {
     const step5 = skill.split('### 5.')[1]?.split('### 6.')[0] ?? '';
     for (const line of [
-      'PARE também se a lista tiver um arquivo que muda as permissões, o comportamento do agente ou o que roda no CI, mesmo que a mudança pareça ser o objetivo da PR:',
-      '- qualquer arquivo dentro de uma pasta `.claude/` ou `.agents/`, em qualquer nível do repositório;',
+      'PARE também se a lista tiver um arquivo que muda as permissões, o comportamento do agente ou o que roda no CI, mesmo que a mudança pareça ser o objetivo da PR. Cada item abaixo vale em qualquer nível do repositório, na raiz ou em qualquer subpasta:',
+      '- qualquer arquivo dentro de uma pasta `.claude/` ou `.agents/`;',
       '- `.mcp.json`;',
       '- qualquer arquivo dentro de `.vscode/` ou de `.github/`;',
       '- `.gitattributes`.',
-      'Mostre ao usuário os arquivos desse grupo e devolva o controle a ele. Só siga para o passo 6 depois que ele responder, de forma explícita, que a mudança foi de propósito. Se `.claude/settings.json` ou `.claude/skills/ship-pr/SKILL.md` estiverem entre eles, a resposta precisa trazer o SHA256 de cada um, conferido por ele. Silêncio, "ok?" ou uma resposta sem o SHA256 pedido não são confirmação.',
+      'Mostre ao usuário os arquivos desse grupo e devolva o controle a ele. Só siga para o passo 6 depois que ele responder, de forma explícita, que a mudança foi de propósito. Se `.claude/settings.json` ou `.claude/skills/ship-pr/SKILL.md` estiverem entre eles, a resposta precisa trazer o SHA256 de cada um, calculado pelo usuário com `Get-FileHash` no arquivo da branch. Não calcule o hash por conta própria: use o valor informado na resposta e só confira se há um para cada arquivo pedido. Silêncio, "ok?" ou uma resposta sem o SHA256 pedido não são confirmação.',
     ]) {
       expect(step5, line).toContain(line);
     }
