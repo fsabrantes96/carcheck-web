@@ -85,7 +85,7 @@ const SHIP_PR_FRONTMATTER_SHA256 =
 // carcheck-api é outra. A skill é editada à mão pelo usuário; atualize esta
 // constante no mesmo commit.
 const SHIP_PR_SKILL_SHA256 =
-  '9B9023A22680A002F633F7F692C34BE1889EDACB2270B9F086CD0ED9337C0783';
+  '3345C1F6581637D7B825B91895E942E39738933100C04DD21736E77B413C45EF';
 
 // Frontmatter: abre na primeira linha e fecha com uma linha que é só ---.
 const FRONTMATTER = /^---\n([\s\S]*?)\n---\n/;
