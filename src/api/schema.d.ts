@@ -2459,7 +2459,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponseDto"];
                 };
             };
-            /** @description Estado não permite, prazo expirado ou estado mudou */
+            /** @description Estado não permite, prazo expirado ou estado mudou, ou "Conflito ao processar, tente novamente" (conflito de transação no banco; repita a requisição) */
             409: {
                 headers: {
                     [name: string]: unknown;
