@@ -23,7 +23,8 @@ npm test               # vitest run (src/**/*.spec.{ts,tsx})
 npm run test:watch     # vitest in watch mode
 npx vitest run src/api/errors.spec.ts   # single file
 npx vitest run -t "name of test"        # single test by name
-npm run format         # prettier --write . (markdown is ignored)
+npm run format         # prettier --write . (.prettierignore keeps out .claude/, .agents/, src/claude/ and generated files)
+npm run format:check   # prettier --check . (runs in CI)
 npm run api:sync       # copies ../carcheck-api/openapi.json (or `-- <path>`) to api/openapi.json and regenerates src/api/schema.d.ts
 npm run api:check      # regenerates into a temp file and fails if src/api/schema.d.ts differs (no back-end repo needed; runs in CI)
 ```
@@ -36,7 +37,7 @@ To run the app end to end, start the back-end first (see its README): API on `ht
 
 **Before `npm ci`, `npm install`, or anything else that deletes or rewrites `node_modules`:** list the node processes with their command lines (`Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Select-Object ProcessId, CreationDate, CommandLine`). If one belongs to this project (e.g. `npm run dev`, `vitest`), STOP and ask the user to stop it; never kill a user's process. On Windows a running process holds files in `node_modules` open and `npm ci` fails with EPERM halfway through.
 
-CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on PRs to `main` with the same hardening as the back-end: job id `build` (the required status check name: never rename it, give it a `name:` or a matrix), `permissions: contents: read`, checkout with `persist-credentials: false`, actions pinned by the same commit SHAs as the back-end (version in a comment; risk 8), `timeout-minutes: 20`, `concurrency` cancelling the previous run, no npm cache (`package-manager-cache: false`). It installs npm from `devEngines` in `${{ runner.temp }}` (no step may run npm inside the project folder before npm 12.2.1 is installed: npm 11 enforces `devEngines` there), checks `npm -v`, runs `npm ci` with `NPM_CONFIG_STRICT_ALLOW_SCRIPTS=true`, requires `npm install-scripts ls --json` to be empty, runs `npm audit signatures`, then the permissions spec on its own (`./node_modules/.bin/vitest run --config src/claude/vitest.claude.config.ts`, failing on zero or skipped tests; see Testing), lint, typecheck, test, `api:check` and build.
+CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on PRs to `main` with the same hardening as the back-end: job id `build` (the required status check name: never rename it, give it a `name:` or a matrix), `permissions: contents: read`, checkout with `persist-credentials: false`, actions pinned by the same commit SHAs as the back-end (version in a comment; risk 8), `timeout-minutes: 20`, `concurrency` cancelling the previous run, no npm cache (`package-manager-cache: false`). It installs npm from `devEngines` in `${{ runner.temp }}` (no step may run npm inside the project folder before npm 12.2.1 is installed: npm 11 enforces `devEngines` there), checks `npm -v`, runs `npm ci` with `NPM_CONFIG_STRICT_ALLOW_SCRIPTS=true`, requires `npm install-scripts ls --json` to be empty, runs `npm audit signatures`, then the permissions spec on its own (`./node_modules/.bin/vitest run --config src/claude/vitest.claude.config.ts`, failing on zero or skipped tests; see Testing), `format:check`, lint, typecheck, test, `api:check` and build.
 
 ## Architecture
 
@@ -73,7 +74,7 @@ CI ([.github/workflows/ci.yml](.github/workflows/ci.yml)) runs on PRs to `main` 
    - Message through `git commit -F`, from a UTF-8 file without BOM written with an absolute path in the session scratchpad (never in the repository or in `.git/`). In PowerShell 5.1: `[IO.File]::WriteAllText($path, $text, (New-Object Text.UTF8Encoding $false))`; redirecting with `>` writes UTF-16.
    - No push; pushing happens only in `/ship-pr`, which only the user starts.
 7. **Review by the agents.** Bring every finding with a recommendation for each one, and apply nothing before the user answers.
-8. **Full suite after the last commit:** `npm run lint`, `npm run typecheck`, `npm test`, `npm run build` and `npm run api:check`.
+8. **Full suite after the last commit:** `npm run lint`, `npm run typecheck`, `npm test`, `npm run build`, `npm run api:check` and `npm run format:check`.
 9. **Mutations in a copy outside the repository.**
    - `robocopy` from the repository to a new, empty folder in the session scratchpad, excluding `node_modules`, `.git`, `.claude`, `.env` and the permissions spec folder; never `/MIR`, `/PURGE`, `/MOV` or `/MOVE`. `.env` never goes into the copy; if a mutation run fails for a missing variable, stop and ask.
    - Record the commit SHA the copy was made from.

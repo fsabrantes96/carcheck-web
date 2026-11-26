@@ -47,6 +47,7 @@ O npm 12 bloqueia scripts de instalação de dependências que não estejam no `
 | `npm test` | Vitest (jsdom, Testing Library, MSW) |
 | `npm run test:watch` | Vitest em modo watch |
 | `npm run format` | Prettier |
+| `npm run format:check` | Confere a formatação com o Prettier (roda no CI) |
 | `npm run api:sync` | Copia o contrato do back e regenera os tipos |
 | `npm run api:check` | Confere se os tipos commitados batem com o contrato commitado |
 
