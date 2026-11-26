@@ -8,5 +8,5 @@ src/claude/
 api/openapi.json
 src/api/schema.d.ts
 package-lock.json
-dist
-coverage
+/dist
+/coverage
