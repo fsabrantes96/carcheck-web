@@ -23,7 +23,7 @@ npm test               # vitest run (src/**/*.spec.{ts,tsx})
 npm run test:watch     # vitest in watch mode
 npx vitest run src/api/errors.spec.ts   # single file
 npx vitest run -t "name of test"        # single test by name
-npm run format         # prettier --write . (.prettierignore keeps out .claude/, .agents/, src/claude/ and generated files)
+npm run format         # prettier --write . (.prettierignore keeps out .claude/, .agents/, src/claude/, .vscode/, .mcp.json, api/openapi.json, src/api/schema.d.ts, package-lock.json, dist and coverage; .gitignore covers the rest)
 npm run format:check   # prettier --check . (runs in CI)
 npm run api:sync       # copies ../carcheck-api/openapi.json (or `-- <path>`) to api/openapi.json and regenerates src/api/schema.d.ts
 npm run api:check      # regenerates into a temp file and fails if src/api/schema.d.ts differs (no back-end repo needed; runs in CI)
