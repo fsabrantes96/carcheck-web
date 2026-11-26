@@ -1,7 +1,12 @@
-dist
-coverage
-package-lock.json
+# O prettier --write roda como processo filho e passa por cima do deny de
+# Edit: estes caminhos são editados só à mão pelo usuário ou são gerados.
+.claude/
+.agents/
+src/claude/
+/.vscode/
+/.mcp.json
 api/openapi.json
 src/api/schema.d.ts
-# Markdown fica fora, como no back (o format de lá só cobre .ts)
-*.md
+package-lock.json
+/dist
+/coverage

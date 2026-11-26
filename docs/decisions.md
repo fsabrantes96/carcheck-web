@@ -3,7 +3,7 @@
 Stack e motivo de cada escolha. Mudar uma delas é decisão do dono do projeto.
 
 | Escolha | Motivo |
-|---|---|
+| --- | --- |
 | **Vite + React + TypeScript (SPA)** | Build rápido e simples para um app que fala com uma API separada. Sem SSR por enquanto (custo: SEO das páginas públicas, risco 2 do audit). |
 | **React Router** (`createBrowserRouter`) | Roteamento padrão do ecossistema React. A tabela de rotas fica em `src/routes.tsx` e os testes usam `createMemoryRouter` com as mesmas rotas. |
 | **Tailwind** (plugin `@tailwindcss/vite`) | Estilo direto no componente, sem CSS solto; o plugin do Vite dispensa PostCSS. |
