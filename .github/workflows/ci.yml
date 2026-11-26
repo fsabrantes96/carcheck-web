@@ -92,11 +92,11 @@ jobs:
       # item G). Fica antes do lint, do typecheck, dos unitários, do api:check
       # e do build para nenhum desses passos, que rodam código do projeto,
       # mexer no workspace antes dele; nenhum script de instalação roda antes
-      # (o projeto não tem postinstall e o CI confere que nenhum script de
-      # dependência ficou sem revisão). O vitest vem do node_modules instalado
-      # pelo lock (sem npx, que baixaria outro do registry se ele faltasse). Se
-      # algum dos campos conferidos sumir do relatório JSON, a conferência
-      # falha fechado.
+      # (o package.json não tem preinstall, install, postinstall nem prepare,
+      # e o allowScripts não aprova script de nenhuma dependência). O vitest
+      # vem do node_modules instalado pelo lock (sem npx, que baixaria outro
+      # do registry se ele faltasse). Se algum dos campos conferidos sumir do
+      # relatório JSON, a conferência falha fechado.
       - name: Spec das permissões isolado (falha se não rodar)
         run: |
           report="$RUNNER_TEMP/claude-settings-report.json"
