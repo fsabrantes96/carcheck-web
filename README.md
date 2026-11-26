@@ -38,7 +38,7 @@ O npm 12 bloqueia scripts de instalação de dependências que não estejam no `
 ## Scripts
 
 | Script | O que faz |
-|---|---|
+| --- | --- |
 | `npm run dev` | Servidor de desenvolvimento do Vite |
 | `npm run build` | Build de produção em `dist/` |
 | `npm run preview` | Serve o `dist/` localmente, com o proxy |
